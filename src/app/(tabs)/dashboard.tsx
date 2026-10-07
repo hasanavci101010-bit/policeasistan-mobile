@@ -82,46 +82,46 @@ export default function DashboardScreen() {
           <Text style={styles.companyName}>{user?.companyName}</Text>
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Cikis</Text>
+          <Text style={styles.logoutText}>Çıkış</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.planCard}>
         <Text style={styles.planLabel}>Aktif Plan</Text>
         <Text style={styles.planName}>{user?.plan}</Text>
-        <Text style={styles.planSub}>Toplam Brut Prim: {summary?.totalBrutPrim ?? 0}</Text>
+        <Text style={styles.planSub}>Toplam Brüt Prim: ₺{Number(summary?.totalBrutPrim ?? 0).toLocaleString('tr-TR')}</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>Genel Bakis</Text>
+      <Text style={styles.sectionTitle}>Genel Bakış</Text>
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{summary?.totalPolicies ?? 0}</Text>
-          <Text style={styles.statLabel}>Toplam Police</Text>
+          <Text style={styles.statLabel}>Toplam Poliçe</Text>
         </View>
         <View style={[styles.statCard, styles.statCardWarning]}>
           <Text style={[styles.statNumber, styles.statNumberWarning]}>{summary?.urgentPolicies ?? 0}</Text>
-          <Text style={styles.statLabel}>Yaklasan Vade</Text>
+          <Text style={styles.statLabel}>Yaklaşan Vade</Text>
         </View>
         <View style={[styles.statCard, styles.statCardDanger]}>
           <Text style={[styles.statNumber, styles.statNumberDanger]}>{summary?.expiredPolicies ?? 0}</Text>
-          <Text style={styles.statLabel}>Vadesi Gecmis</Text>
+          <Text style={styles.statLabel}>Vadesi Geçmiş</Text>
         </View>
       </View>
 
       <View style={styles.komisyonCard}>
         <Text style={styles.komisyonLabel}>Toplam Acente Komisyonu</Text>
-        <Text style={styles.komisyonAmount}>{summary?.totalAcenteKomisyonu ?? 0}</Text>
+        <Text style={styles.komisyonAmount}>₺{Number(summary?.totalAcenteKomisyonu ?? 0).toLocaleString('tr-TR')}</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>Hizli Erisim</Text>
+      <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/policeler')}>
           <Text style={styles.actionIcon}>📋</Text>
-          <Text style={styles.actionText}>Policeler</Text>
+          <Text style={styles.actionText}>Poliçeler</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/musteriler')}>
           <Text style={styles.actionIcon}>👥</Text>
-          <Text style={styles.actionText}>Musteriler</Text>
+          <Text style={styles.actionText}>Müşteriler</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionCard}>
           <Text style={styles.actionIcon}>📊</Text>
