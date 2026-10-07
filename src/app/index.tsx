@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const API_URL = 'https://policeasistan.com/api';
@@ -9,6 +9,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hazir, setHazir] = useState(false);
+
+  // Acik oturum varsa girisi atla (kapi /auth/me ile dogrular)
+  useEffect(() => {
+    AsyncStorage.getItem('user')
+      .then((u) => {
+        if (u) router.replace('/(tabs)/dashboard');
+        else setHazir(true);
+      })
+      .catch(() => setHazir(true));
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -41,6 +52,14 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  if (!hazir) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#007BFF" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
