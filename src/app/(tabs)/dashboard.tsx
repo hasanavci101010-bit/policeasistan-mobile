@@ -88,7 +88,10 @@ export default function DashboardScreen() {
 
       <View style={styles.planCard}>
         <Text style={styles.planLabel}>Aktif Plan</Text>
-        <Text style={styles.planName}>{user?.plan}</Text>
+        <Text style={styles.planName}>{PLAN_ADLARI[user?.plan] ?? user?.plan}</Text>
+        {planBitisMetni(user, summary) !== '' && (
+          <Text style={styles.planSub}>{planBitisMetni(user, summary)}</Text>
+        )}
         <Text style={styles.planSub}>Toplam Brüt Prim: ₺{Number(summary?.totalBrutPrim ?? 0).toLocaleString('tr-TR')}</Text>
       </View>
 
@@ -123,17 +126,25 @@ export default function DashboardScreen() {
           <Text style={styles.actionIcon}>👥</Text>
           <Text style={styles.actionText}>Müşteriler</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard}>
-          <Text style={styles.actionIcon}>📊</Text>
-          <Text style={styles.actionText}>Raporlar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard}>
-          <Text style={styles.actionIcon}>⚙️</Text>
-          <Text style={styles.actionText}>Ayarlar</Text>
-        </TouchableOpacity>
       </View>
     </ScrollView>
   );
+}
+
+const PLAN_ADLARI: Record<string, string> = {
+  trial: 'Deneme', standart: 'Standart', profesyonel: 'Profesyonel',
+  kurumsal: 'Kurumsal', acenteplus: 'Acente Plus', sinirsiz: 'Sınırsız',
+};
+
+function planBitisMetni(user: any, summary: any): string {
+  const tarih = user?.plan === 'trial' ? user?.trialEndsAt : (summary?.subscriptionEndsAt ?? user?.subscriptionEndsAt);
+  if (!tarih) return '';
+  const bitis = new Date(tarih);
+  const gun = Math.ceil((bitis.getTime() - Date.now()) / 86400000);
+  const tr = bitis.toLocaleDateString('tr-TR');
+  if (gun < 0) return 'Süresi doldu';
+  if (user?.plan === 'trial') return `Deneme süresi: ${gun} gün kaldı (${tr})`;
+  return `Yenileme tarihi: ${tr} (${gun} gün)`;
 }
 
 const styles = StyleSheet.create({
