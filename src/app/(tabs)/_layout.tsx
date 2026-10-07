@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const API_URL = 'https://policeasistan.com/api';
 
@@ -20,6 +21,7 @@ function TabIcon({ icon }: { icon: string }) {
 
 export default function TabsLayout() {
   const [durum, setDurum] = useState<Durum>('kontrol');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     let iptal = false;
@@ -95,9 +97,9 @@ export default function TabsLayout() {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 60,
+          paddingBottom: insets.bottom + 6,
+          paddingTop: 6,
+          height: 56 + insets.bottom,
         },
         headerStyle: { backgroundColor: '#FFFFFF' },
         headerTitleStyle: { fontWeight: '600', color: '#1F2937' },

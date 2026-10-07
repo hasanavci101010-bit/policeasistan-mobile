@@ -5,13 +5,18 @@ import { useRouter } from 'expo-router';
 
 const API_URL = 'https://policeasistan.com/api';
 
+const TIP_ADLARI: Record<string, string> = {
+  'trafik': 'Trafik', 'kasko': 'Kasko', 'dask': 'DASK', 'konut': 'Konut',
+  'imm-sorumluluk': 'İMM Sorumluluk', 'ferdi kaza': 'Ferdi Kaza',
+  'yol yardım': 'Yol Yardım', 'sağlık': 'Sağlık', 'saglik': 'Sağlık',
+};
+
 function tipAdi(t: string | null | undefined): string {
-  const k = (t ?? '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-  if (!k) return '';
-  if (k === 'dask') return 'DASK';
-  if (k === 'sağlık' || k === 'saglik') return 'Saglik';
-  const ilk = k.charAt(0) === 'i' ? 'İ' : k.charAt(0).toUpperCase();
-  return ilk + k.slice(1);
+  const ham = (t ?? '').trim();
+  if (!ham) return '';
+  const k = ham.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+  if (TIP_ADLARI[k]) return TIP_ADLARI[k];
+  return k.split(' ').map(w => (w ? (w.charAt(0) === 'i' ? 'İ' : w.charAt(0).toUpperCase()) + w.slice(1) : w)).join(' ');
 }
 
 
@@ -39,7 +44,11 @@ export default function PolicelerScreen() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState('');
 
-  const tipler = ['Hepsi', 'Trafik', 'Kasko', 'DASK', 'Konut'];
+  const tipSayilari = policeler.reduce((acc: Record<string, number>, p: any) => {
+    if (p.tip) acc[p.tip] = (acc[p.tip] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const tipler = ['Hepsi', ...Object.keys(tipSayilari).sort((x, y) => tipSayilari[y] - tipSayilari[x])];
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
