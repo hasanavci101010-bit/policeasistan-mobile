@@ -1,13 +1,19 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
-const MOCK_POLICELER = [
-  { id: 1, musteriAdi: 'Ahmet Yilmaz', policeNo: 'TRF-2024-001', tip: 'Trafik', sirket: 'Anadolu Sigorta', sonTarih: '2025-03-15', brutPrim: 1250 },
-  { id: 2, musteriAdi: 'Ayse Demir', policeNo: 'KSK-2024-002', tip: 'Kasko', sirket: 'Allianz', sonTarih: '2025-01-20', brutPrim: 8500 },
-  { id: 3, musteriAdi: 'Mehmet Kaya', policeNo: 'DSK-2024-003', tip: 'DASK', sirket: 'Mapfre', sonTarih: '2025-06-10', brutPrim: 650 },
-  { id: 4, musteriAdi: 'Fatma Sahin', policeNo: 'KNT-2024-004', tip: 'Konut', sirket: 'Generali', sonTarih: '2024-12-31', brutPrim: 2100 },
-  { id: 5, musteriAdi: 'Ali Celik', policeNo: 'TRF-2024-005', tip: 'Trafik', sirket: 'Axa', sonTarih: '2025-04-22', brutPrim: 980 },
-];
+const API_URL = 'https://policeasistan.com/api';
+
+function tipAdi(t: string | null | undefined): string {
+  const k = (t ?? '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+  if (!k) return '';
+  if (k === 'dask') return 'DASK';
+  if (k === 'sağlık' || k === 'saglik') return 'Saglik';
+  const ilk = k.charAt(0) === 'i' ? 'İ' : k.charAt(0).toUpperCase();
+  return ilk + k.slice(1);
+}
+
 
 const TIP_RENKLERI: Record<string, string> = {
   'Trafik': '#DBEAFE',
@@ -26,17 +32,73 @@ const TIP_YAZI_RENKLERI: Record<string, string> = {
 };
 
 export default function PolicelerScreen() {
+  const router = useRouter();
   const [arama, setArama] = useState('');
   const [seciliTip, setSeciliTip] = useState('Hepsi');
+  const [policeler, setPoliceler] = useState<any[]>([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState('');
 
   const tipler = ['Hepsi', 'Trafik', 'Kasko', 'DASK', 'Konut'];
 
-  const filtrelenmis = MOCK_POLICELER.filter(p => {
+  const yukle = useCallback(async () => {
+    setYukleniyor(true);
+    setHata('');
+    try {
+      const res = await fetch(`${API_URL}/policies?pageSize=9999`, { credentials: 'include' });
+      if (res.status === 401) {
+        await AsyncStorage.removeItem('user');
+        router.replace('/');
+        return;
+      }
+      if (!res.ok) {
+        setHata('Poliçeler yüklenemedi. Lütfen tekrar deneyin.');
+        return;
+      }
+      const json = await res.json();
+      setPoliceler((json.data ?? []).map((p: any) => ({
+        id: p.id,
+        musteriAdi: p.customerName ?? '',
+        policeNo: p.policyNumber ?? '',
+        tip: tipAdi(p.policyType),
+        sirket: p.insuranceCompany ?? '',
+        sonTarih: p.expiryDate ? String(p.expiryDate).slice(0, 10) : '',
+        brutPrim: Number(p.brutPrim ?? 0),
+      })));
+    } catch {
+      setHata('Bağlantı hatası. İnternetinizi kontrol edin.');
+    } finally {
+      setYukleniyor(false);
+    }
+  }, [router]);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const filtrelenmis = policeler.filter(p => {
     const aramaEslesmesi = p.musteriAdi.toLowerCase().includes(arama.toLowerCase()) ||
       p.policeNo.toLowerCase().includes(arama.toLowerCase());
     const tipEslesmesi = seciliTip === 'Hepsi' || p.tip === seciliTip;
     return aramaEslesmesi && tipEslesmesi;
   });
+
+  if (yukleniyor) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#007BFF" />
+      </View>
+    );
+  }
+
+  if (hata) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>{hata}</Text>
+        <TouchableOpacity onPress={yukle} style={{ backgroundColor: '#007BFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}>
+          <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Tekrar dene</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

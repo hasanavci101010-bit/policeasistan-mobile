@@ -42,6 +42,11 @@ export default function DashboardScreen() {
         credentials: 'include',
       });
 
+      if (summaryRes.status === 401) {
+        await AsyncStorage.removeItem('user');
+        router.replace('/');
+        return;
+      }
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setSummary(summaryData);

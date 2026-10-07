@@ -1,21 +1,78 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
-const MOCK_MUSTERILER = [
-  { id: 1, ad: 'Ahmet Yilmaz', telefon: '0532 111 22 33', email: 'ahmet@email.com', policeCount: 3, aktif: true },
-  { id: 2, ad: 'Ayse Demir', telefon: '0533 222 33 44', email: 'ayse@email.com', policeCount: 1, aktif: true },
-  { id: 3, ad: 'Mehmet Kaya', telefon: '0535 333 44 55', email: 'mehmet@email.com', policeCount: 2, aktif: true },
-  { id: 4, ad: 'Fatma Sahin', telefon: '0536 444 55 66', email: 'fatma@email.com', policeCount: 1, aktif: false },
-  { id: 5, ad: 'Ali Celik', telefon: '0537 555 66 77', email: 'ali@email.com', policeCount: 4, aktif: true },
-];
+const API_URL = 'https://policeasistan.com/api';
+
 
 export default function MusterilerScreen() {
+  const router = useRouter();
   const [arama, setArama] = useState('');
+  const [musteriler, setMusteriler] = useState<any[]>([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState('');
 
-  const filtrelenmis = MOCK_MUSTERILER.filter(m =>
+  const yukle = useCallback(async () => {
+    setYukleniyor(true);
+    setHata('');
+    try {
+      const res = await fetch(`${API_URL}/policies?pageSize=9999`, { credentials: 'include' });
+      if (res.status === 401) {
+        await AsyncStorage.removeItem('user');
+        router.replace('/');
+        return;
+      }
+      if (!res.ok) {
+        setHata('Müşteriler yüklenemedi. Lütfen tekrar deneyin.');
+        return;
+      }
+      const json = await res.json();
+      const gruplar = new Map<string, any>();
+      for (const p of (json.data ?? [])) {
+        const ad = String(p.customerName ?? '').trim();
+        if (!ad) continue;
+        const anahtar = ad.toLocaleLowerCase('tr-TR');
+        const g = gruplar.get(anahtar) ?? { id: anahtar, ad, telefon: '', email: '', policeCount: 0, aktif: false };
+        g.policeCount += 1;
+        if (!g.telefon && p.customerPhone) g.telefon = p.customerPhone;
+        if (!g.email && p.customerEmail) g.email = p.customerEmail;
+        if ((p.status ?? 'aktif') === 'aktif') g.aktif = true;
+        gruplar.set(anahtar, g);
+      }
+      setMusteriler(Array.from(gruplar.values()).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')));
+    } catch {
+      setHata('Bağlantı hatası. İnternetinizi kontrol edin.');
+    } finally {
+      setYukleniyor(false);
+    }
+  }, [router]);
+
+  useEffect(() => { yukle(); }, [yukle]);
+
+  const filtrelenmis = musteriler.filter(m =>
     m.ad.toLowerCase().includes(arama.toLowerCase()) ||
-    m.telefon.includes(arama)
+    (m.telefon ?? '').includes(arama)
   );
+
+  if (yukleniyor) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#007BFF" />
+      </View>
+    );
+  }
+
+  if (hata) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>{hata}</Text>
+        <TouchableOpacity onPress={yukle} style={{ backgroundColor: '#007BFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}>
+          <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Tekrar dene</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const getInitials = (ad: string) => {
     return ad.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
