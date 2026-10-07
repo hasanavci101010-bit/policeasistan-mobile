@@ -88,7 +88,7 @@ export default function DashboardScreen() {
 
       <View style={styles.planCard}>
         <Text style={styles.planLabel}>Aktif Plan</Text>
-        <Text style={styles.planName}>{PLAN_ADLARI[user?.plan] ?? user?.plan}</Text>
+        <Text style={styles.planName}>{PLAN_ADLARI[user?.plan ?? ''] ?? user?.plan}</Text>
         {planBitisMetni(user, summary) !== '' && (
           <Text style={styles.planSub}>{planBitisMetni(user, summary)}</Text>
         )}
