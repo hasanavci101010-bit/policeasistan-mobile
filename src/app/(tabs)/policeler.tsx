@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 
@@ -43,6 +43,7 @@ export default function PolicelerScreen() {
   const [policeler, setPoliceler] = useState<any[]>([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState('');
+  const [yenileniyor, setYenileniyor] = useState(false);
 
   const tipSayilari = policeler.reduce((acc: Record<string, number>, p: any) => {
     if (p.tip) acc[p.tip] = (acc[p.tip] ?? 0) + 1;
@@ -50,8 +51,8 @@ export default function PolicelerScreen() {
   }, {} as Record<string, number>);
   const tipler = ['Hepsi', ...Object.keys(tipSayilari).sort((x, y) => tipSayilari[y] - tipSayilari[x])];
 
-  const yukle = useCallback(async () => {
-    setYukleniyor(true);
+  const yukle = useCallback(async (sessiz = false) => {
+    if (!sessiz) setYukleniyor(true);
     setHata('');
     try {
       const res = await fetch(`${API_URL}/policies?pageSize=9999`, { credentials: 'include' });
@@ -61,7 +62,7 @@ export default function PolicelerScreen() {
         return;
       }
       if (!res.ok) {
-        setHata('Poliçeler yüklenemedi. Lütfen tekrar deneyin.');
+        if (!sessiz) setHata('Poliçeler yüklenemedi. Lütfen tekrar deneyin.');
         return;
       }
       const json = await res.json();
@@ -75,13 +76,19 @@ export default function PolicelerScreen() {
         brutPrim: Number(p.brutPrim ?? 0),
       })));
     } catch {
-      setHata('Bağlantı hatası. İnternetinizi kontrol edin.');
+      if (!sessiz) setHata('Bağlantı hatası. İnternetinizi kontrol edin.');
     } finally {
       setYukleniyor(false);
     }
   }, [router]);
 
   useEffect(() => { yukle(); }, [yukle]);
+
+  const yenile = async () => {
+    setYenileniyor(true);
+    await yukle(true);
+    setYenileniyor(false);
+  };
 
   const filtrelenmis = policeler.filter(p => {
     const aramaEslesmesi = p.musteriAdi.toLowerCase().includes(arama.toLowerCase()) ||
@@ -102,7 +109,7 @@ export default function PolicelerScreen() {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Text style={{ color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>{hata}</Text>
-        <TouchableOpacity onPress={yukle} style={{ backgroundColor: '#007BFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}>
+        <TouchableOpacity onPress={() => yukle()} style={{ backgroundColor: '#007BFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}>
           <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Tekrar dene</Text>
         </TouchableOpacity>
       </View>
@@ -139,7 +146,7 @@ export default function PolicelerScreen() {
       </ScrollView>
 
       {/* Liste */}
-      <ScrollView style={styles.liste}>
+      <ScrollView style={styles.liste} refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={yenile} colors={['#007BFF']} />}>
         {filtrelenmis.map(police => (
           <TouchableOpacity key={police.id} style={styles.policeKart}>
             <View style={styles.policeKartUst}>
