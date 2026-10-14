@@ -1,9 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const API_URL = 'https://policeasistan.com/api';
+const SITE_URL = 'https://policeasistan.com';
+
+const YASAL_BAGLANTILAR = [
+  { baslik: 'Gizlilik Politikası', yol: '/gizlilik-politikasi' },
+  { baslik: 'KVKK Aydınlatma Metni', yol: '/kvkk' },
+  { baslik: 'Kullanım Koşulları', yol: '/kullanim-kosullari' },
+];
 
 interface User {
   fullName: string;
@@ -68,7 +76,7 @@ export default function DashboardScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.loadingText}>Yukleniyor...</Text>
+        <Text style={styles.loadingText}>Yükleniyor...</Text>
       </View>
     );
   }
@@ -127,6 +135,20 @@ export default function DashboardScreen() {
           <Text style={styles.actionText}>Müşteriler</Text>
         </TouchableOpacity>
       </View>
+
+      <Text style={styles.sectionTitle}>Yasal</Text>
+      <View style={styles.linkList}>
+        {YASAL_BAGLANTILAR.map((b, i) => (
+          <TouchableOpacity
+            key={b.yol}
+            style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
+            onPress={() => WebBrowser.openBrowserAsync(SITE_URL + b.yol)}
+          >
+            <Text style={styles.linkText}>{b.baslik}</Text>
+            <Text style={styles.linkArrow}>›</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -173,8 +195,13 @@ const styles = StyleSheet.create({
   komisyonCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#E5E7EB' },
   komisyonLabel: { fontSize: 13, color: '#6B7280' },
   komisyonAmount: { fontSize: 28, fontWeight: '700', color: '#059669', marginTop: 4 },
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 40 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   actionCard: { width: '47%', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
   actionIcon: { fontSize: 32, marginBottom: 8 },
   actionText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  linkList: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 40 },
+  linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
+  linkRowBorder: { borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  linkText: { fontSize: 14, color: '#1F2937' },
+  linkArrow: { fontSize: 20, color: '#9CA3AF' },
 });

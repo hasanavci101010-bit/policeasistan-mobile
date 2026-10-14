@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, type ColorValue, Text, TouchableOpacity, View } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 
 const API_URL = 'https://policeasistan.com/api';
 
@@ -15,8 +16,9 @@ function abonelikAktifMi(u: any): boolean {
   return new Date(bitis).getTime() > Date.now();
 }
 
-function TabIcon({ icon }: { icon: string }) {
-  return <Text style={{ fontSize: 20 }}>{icon}</Text>;
+// iOS'ta SF Symbol, Android'de Material Symbol
+function TabIcon({ name, color }: { name: SymbolViewProps['name']; color: ColorValue }) {
+  return <SymbolView name={name} tintColor={color} size={24} />;
 }
 
 export default function TabsLayout() {
@@ -107,15 +109,15 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="dashboard"
-        options={{ title: 'Ana Sayfa', tabBarIcon: () => <TabIcon icon="🏠" /> }}
+        options={{ title: 'Ana Sayfa', tabBarIcon: ({ color }) => <TabIcon name={{ ios: 'house.fill', android: 'home', web: 'home' }} color={color} /> }}
       />
       <Tabs.Screen
         name="policeler"
-        options={{ title: 'Poliçeler', tabBarIcon: () => <TabIcon icon="📋" /> }}
+        options={{ title: 'Poliçeler', tabBarIcon: ({ color }) => <TabIcon name={{ ios: 'doc.text.fill', android: 'description', web: 'description' }} color={color} /> }}
       />
       <Tabs.Screen
         name="musteriler"
-        options={{ title: 'Müşteriler', tabBarIcon: () => <TabIcon icon="👥" /> }}
+        options={{ title: 'Müşteriler', tabBarIcon: ({ color }) => <TabIcon name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} color={color} /> }}
       />
     </Tabs>
   );

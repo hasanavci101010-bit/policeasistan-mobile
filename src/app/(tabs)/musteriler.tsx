@@ -92,7 +92,7 @@ export default function MusterilerScreen() {
       <View style={styles.aramaContainer}>
         <TextInput
           style={styles.aramaInput}
-          placeholder="Musteri adi veya telefon ara..."
+          placeholder="Müşteri adı veya telefon ara..."
           placeholderTextColor="#9CA3AF"
           value={arama}
           onChangeText={setArama}
@@ -101,10 +101,7 @@ export default function MusterilerScreen() {
 
       {/* Toplam */}
       <View style={styles.toplamRow}>
-        <Text style={styles.toplamText}>Toplam {filtrelenmis.length} musteri</Text>
-        <TouchableOpacity style={styles.ekleButon}>
-          <Text style={styles.ekleButonText}>+ Yeni Musteri</Text>
-        </TouchableOpacity>
+        <Text style={styles.toplamText}>Toplam {filtrelenmis.length} müşteri</Text>
       </View>
 
       {/* Liste */}
@@ -125,14 +122,14 @@ export default function MusterilerScreen() {
               </View>
               <Text style={styles.telefon}>{musteri.telefon}</Text>
               <Text style={styles.email}>{musteri.email}</Text>
-              <Text style={styles.policeCount}>{musteri.policeCount} aktif police</Text>
+              <Text style={styles.policeCount}>{musteri.policeCount} aktif poliçe</Text>
             </View>
           </TouchableOpacity>
         ))}
 
         {filtrelenmis.length === 0 && (
           <View style={styles.bos}>
-            <Text style={styles.bosText}>Musteri bulunamadi</Text>
+            <Text style={styles.bosText}>Müşteri bulunamadı</Text>
           </View>
         )}
       </ScrollView>
@@ -147,8 +144,6 @@ const styles = StyleSheet.create({
   aramaInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, fontSize: 14, color: '#1F2937' },
   toplamRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
   toplamText: { fontSize: 13, color: '#6B7280' },
-  ekleButon: { backgroundColor: '#2563EB', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  ekleButonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   liste: { flex: 1, padding: 16 },
   musteriKart: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', gap: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

@@ -23,7 +23,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Hata', 'E-posta ve sifre zorunludur.');
+      Alert.alert('Hata', 'E-posta ve şifre zorunludur.');
       return;
     }
 
@@ -39,7 +39,7 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        Alert.alert('Hata', data.error || 'Giris yapilamadi.');
+        Alert.alert('Hata', data.error || 'Giriş yapılamadı.');
         return;
       }
 
@@ -47,7 +47,7 @@ export default function LoginScreen() {
       router.replace('/(tabs)/dashboard');
 
     } catch (error) {
-      Alert.alert('Baglanti Hatasi', 'Sunucuya baglanılamadi.');
+      Alert.alert('Bağlantı Hatası', 'Sunucuya bağlanılamadı.');
     } finally {
       setLoading(false);
     }
@@ -64,11 +64,11 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Text style={styles.logoText}>Police</Text>
+        <Text style={styles.logoText}>Poliçe</Text>
         <Text style={styles.logoTextBlue}>Asistan</Text>
       </View>
 
-      <Text style={styles.subtitle}>Sigorta acentenizi dijitallestitin</Text>
+      <Text style={styles.subtitle}>Sigorta acentenizi dijitalleştirin</Text>
 
       <View style={styles.form}>
         <TextInput
@@ -83,7 +83,7 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Sifreniz"
+          placeholder="Şifreniz"
           placeholderTextColor="#9CA3AF"
           value={password}
           onChangeText={setPassword}
@@ -98,15 +98,10 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Giris Yap</Text>
+            <Text style={styles.buttonText}>Giriş Yap</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.registerButton}>
-          <Text style={styles.registerText}>
-            Hesabiniz yok mu? <Text style={styles.registerLink}>Ucretsiz deneyin</Text>
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -123,7 +118,4 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#2563EB', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   buttonDisabled: { backgroundColor: '#93C5FD' },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  registerButton: { alignItems: 'center', marginTop: 20 },
-  registerText: { fontSize: 14, color: '#6B7280' },
-  registerLink: { color: '#2563EB', fontWeight: '600' },
 });

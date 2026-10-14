@@ -123,7 +123,7 @@ export default function PolicelerScreen() {
       <View style={styles.aramaContainer}>
         <TextInput
           style={styles.aramaInput}
-          placeholder="Musteri adi veya police no ara..."
+          placeholder="Müşteri adı veya poliçe no ara..."
           placeholderTextColor="#9CA3AF"
           value={arama}
           onChangeText={setArama}
@@ -163,7 +163,7 @@ export default function PolicelerScreen() {
               <Text style={styles.brutPrim}>₺{police.brutPrim.toLocaleString('tr-TR')}</Text>
             </View>
             <View style={styles.sonTarihRow}>
-              <Text style={styles.sonTarihLabel}>Bitis tarihi:</Text>
+              <Text style={styles.sonTarihLabel}>Bitiş tarihi:</Text>
               <Text style={styles.sonTarih}>{police.sonTarih}</Text>
             </View>
           </TouchableOpacity>
@@ -171,7 +171,7 @@ export default function PolicelerScreen() {
 
         {filtrelenmis.length === 0 && (
           <View style={styles.bos}>
-            <Text style={styles.bosText}>Police bulunamadi</Text>
+            <Text style={styles.bosText}>Poliçe bulunamadı</Text>
           </View>
         )}
       </ScrollView>
