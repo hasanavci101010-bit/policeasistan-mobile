@@ -107,7 +107,11 @@ export default function MusterilerScreen() {
       {/* Liste */}
       <ScrollView style={styles.liste} refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={yenile} colors={['#007BFF']} />}>
         {filtrelenmis.map(musteri => (
-          <TouchableOpacity key={musteri.id} style={styles.musteriKart}>
+          <TouchableOpacity
+            key={musteri.id}
+            style={styles.musteriKart}
+            onPress={() => router.push({ pathname: '/musteri/[ad]', params: { ad: musteri.ad, telefon: musteri.telefon || undefined, eposta: musteri.email || undefined } })}
+          >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{getInitials(musteri.ad)}</Text>
             </View>

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -127,11 +128,11 @@ export default function DashboardScreen() {
       <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/policeler')}>
-          <Text style={styles.actionIcon}>📋</Text>
+          <SymbolView name={{ ios: 'doc.text.fill', android: 'description', web: 'description' }} tintColor="#2563EB" size={32} style={styles.actionIcon} />
           <Text style={styles.actionText}>Poliçeler</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/musteriler')}>
-          <Text style={styles.actionIcon}>👥</Text>
+          <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor="#2563EB" size={32} style={styles.actionIcon} />
           <Text style={styles.actionText}>Müşteriler</Text>
         </TouchableOpacity>
       </View>
@@ -162,11 +163,14 @@ function planBitisMetni(user: any, summary: any): string {
   const tarih = user?.plan === 'trial' ? user?.trialEndsAt : (summary?.subscriptionEndsAt ?? user?.subscriptionEndsAt);
   if (!tarih) return '';
   const bitis = new Date(tarih);
-  const gun = Math.ceil((bitis.getTime() - Date.now()) / 86400000);
+  const simdi = new Date();
+  const bugunYarisi = new Date(simdi.getFullYear(), simdi.getMonth(), simdi.getDate()).getTime();
+  const bitisYarisi = new Date(bitis.getFullYear(), bitis.getMonth(), bitis.getDate()).getTime();
+  const gun = Math.round((bitisYarisi - bugunYarisi) / 86400000);
   const tr = bitis.toLocaleDateString('tr-TR');
   if (gun < 0) return 'Süresi doldu';
-  if (user?.plan === 'trial') return `Deneme süresi: ${gun} gün kaldı (${tr})`;
-  return `Yenileme tarihi: ${tr} (${gun} gün)`;
+  if (user?.plan === 'trial') return gun === 0 ? 'Bugün sona eriyor' : `Deneme süresi: ${gun} gün kaldı (${tr})`;
+  return `Yenileme tarihi: ${tr} (${gun === 0 ? 'bugün' : `${gun} gün`})`;
 }
 
 const styles = StyleSheet.create({
@@ -197,7 +201,7 @@ const styles = StyleSheet.create({
   komisyonAmount: { fontSize: 28, fontWeight: '700', color: '#059669', marginTop: 4 },
   quickActions: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   actionCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  actionIcon: { fontSize: 32, marginBottom: 8 },
+  actionIcon: { width: 32, height: 32, marginBottom: 8 },
   actionText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
   linkList: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 40 },
   linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -102,6 +103,10 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://policeasistan.com/sifremi-unuttum')}>
+          <Text style={styles.forgotText}>Şifremi unuttum</Text>
+        </TouchableOpacity>
+
       </View>
     </View>
   );
@@ -117,5 +122,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 16, fontSize: 15, color: '#1F2937', marginBottom: 12 },
   button: { backgroundColor: '#2563EB', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   buttonDisabled: { backgroundColor: '#93C5FD' },
+  forgotText: { color: '#2563EB', fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 20 },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
