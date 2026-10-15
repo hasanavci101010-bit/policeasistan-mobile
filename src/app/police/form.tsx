@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Linking, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   apiFetch, isoToTr, OTURUM_HATASI, POLICE_TURLERI, Police, SIGORTA_SIRKETLERI, trSayiParse, trToIso,
 } from '../../lib/police';
+import { belgeYukle } from '../../lib/belge';
+import {
+  belgeHazirla, belgeOku, plakaTemizle, sayiTr, sirketEslestir, tarihTr, tcTemizle, turEslestir,
+} from '../../lib/ocr';
 
 function tarihMaske(s: string): string {
   const r = s.replace(/\D/g, '').slice(0, 8);
@@ -30,6 +36,17 @@ function birYilSonra(tr: string): string {
 }
 
 const bosNull = (s: string) => (s.trim() ? s.trim() : null);
+
+function izinYok() {
+  Alert.alert('İzin verilmedi', 'Bu özelliği kullanmak için Ayarlar bölümünden izin verebilirsiniz.', [
+    { text: 'Vazgeç', style: 'cancel' },
+    { text: 'Ayarlar', onPress: () => Linking.openSettings() },
+  ]);
+}
+
+type BelgeTuru = 'Poliçe' | 'Ruhsat';
+type TaranmisBelge = { uri: string; mime: string; tur: BelgeTuru };
+type ButonTipi = { text: string; onPress?: () => void; style?: 'cancel' | 'default' | 'destructive' };
 
 export default function PoliceFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -59,6 +76,20 @@ export default function PoliceFormScreen() {
   const [acente, setAcente] = useState('');
   const [tali, setTali] = useState('');
   const [notlar, setNotlar] = useState('');
+
+  const [okuyor, setOkuyor] = useState(false);
+  const [aiAlanlar, setAiAlanlar] = useState<Set<string>>(new Set());
+  const [aiUyariGizli, setAiUyariGizli] = useState(false);
+  const [aiSayi, setAiSayi] = useState(0);
+  const [belge, setBelge] = useState<TaranmisBelge | null>(null);
+  const yuklenenYol = useRef<{ uri: string; yol: string } | null>(null);
+
+  const aiSil = (k: string) => setAiAlanlar(prev => {
+    if (!prev.has(k)) return prev;
+    const y = new Set(prev); y.delete(k); return y;
+  });
+  const yaz = (k: string, set: (t: string) => void) => (t: string) => { set(t); aiSil(k); };
+  const aiStil = (k: string) => (aiAlanlar.has(k) ? styles.inputAi : null);
 
   const sayiYaz = (n: number | null | undefined) =>
     n === null || n === undefined || Number(n) === 0 ? '' : String(n).replace('.', ',');
@@ -96,7 +127,7 @@ export default function PoliceFormScreen() {
 
   useEffect(() => { if (duzenleme) yukle(); }, [duzenleme, yukle]);
 
-  const plakaGoster = tur === 'KASKO' || tur === 'TRAFİK' || mevcutPlakaVar;
+  const plakaGoster = tur === 'KASKO' || tur === 'TRAFİK' || mevcutPlakaVar || (!duzenleme && plaka.trim() !== '');
   const turListesi = tur && !POLICE_TURLERI.includes(tur) ? [...POLICE_TURLERI, tur] : POLICE_TURLERI;
 
   const dogrula = () => {
@@ -143,6 +174,26 @@ export default function PoliceFormScreen() {
     };
     setKaydediliyor(true);
     try {
+      if (!duzenleme && belge) {
+        let yol: string | null = null;
+        if (yuklenenYol.current && yuklenenYol.current.uri === belge.uri) yol = yuklenenYol.current.yol;
+        else {
+          try {
+            yol = await belgeYukle(belge.uri, belge.mime, belge.tur === 'Ruhsat' ? 'Ruhsat' : 'Poliçe Belgesi');
+            yuklenenYol.current = { uri: belge.uri, yol };
+          } catch (e: any) {
+            if (e?.message === OTURUM_HATASI) throw e;
+            const devam = await new Promise<boolean>(resolve => {
+              Alert.alert('Belge yüklenemedi', 'Poliçe belgesiz kaydedilsin mi?', [
+                { text: 'Vazgeç', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Belgesiz kaydet', onPress: () => resolve(true) },
+              ], { cancelable: true, onDismiss: () => resolve(false) });
+            });
+            if (!devam) return;
+          }
+        }
+        if (yol) body[belge.tur === 'Ruhsat' ? 'ruhsatUrl' : 'policyDocumentPath'] = yol;
+      }
       const res = await apiFetch(duzenleme ? `/policies/${id}` : '/policies', {
         method: duzenleme ? 'PUT' : 'POST',
         body: JSON.stringify(body),
@@ -153,7 +204,7 @@ export default function PoliceFormScreen() {
         let mesaj = data?.error || 'Kayıt yapılamadı.';
         if (data?.error === 'PLAN_LIMIT_EXCEEDED') {
           if (data.reason === 'trial_expired') mesaj = 'Deneme süreniz sona erdi. Planınızı web panelinden yönetebilirsiniz.';
-          else if (data.reason === 'policy_count') mesaj = 'Deneme planındaki poliçe limitine ulaştınız.';
+          else if (data.reason === 'policy_count') mesaj = 'Planınızdaki poliçe limitine ulaştınız.';
           else mesaj = 'Plan poliçe limitinize ulaştınız.';
         } else if (data?.error === 'SUBSCRIPTION_EXPIRED') {
           mesaj = 'Aboneliğinizin süresi dolmuş.';
@@ -172,6 +223,84 @@ export default function PoliceFormScreen() {
     } finally {
       setKaydediliyor(false);
     }
+  };
+
+  const bossa = (mevcut: string, yeni: string, k: string, set: (v: string) => void, doldurulan: string[]) => {
+    if (mevcut.trim() === '' && yeni.trim() !== '') { set(yeni); doldurulan.push(k); }
+  };
+
+  const belgeIsle = async (uri: string, mime: string, turu: BelgeTuru) => {
+    setOkuyor(true);
+    try {
+      const hazir = await belgeHazirla(uri, mime);
+      const r = await belgeOku(hazir.base64, hazir.mime);
+      const d: string[] = [];
+      bossa(ad, (r.customerName ?? '').trim(), 'ad', setAd, d);
+      const tel = (r.customerPhone ?? '').trim();
+      if (!tel.includes('*')) bossa(telefon, tel, 'telefon', setTelefon, d);
+      bossa(tc, tcTemizle(r.customerTcNo), 'tc', setTc, d);
+      if (r.policyType) bossa(tur, turEslestir(r.policyType), 'tur', setTur, d);
+      bossa(sirket, r.insuranceCompany ? sirketEslestir(r.insuranceCompany) : '', 'sirket', setSirket, d);
+      bossa(policeNo, (r.policyNumber ?? '').trim(), 'policeNo', setPoliceNo, d);
+      bossa(plaka, plakaTemizle(r.licensePlate), 'plaka', setPlaka, d);
+      bossa(baslangic, tarihTr(r.startDate), 'baslangic', setBaslangic, d);
+      bossa(bitis, tarihTr(r.expiryDate), 'bitis', setBitis, d);
+      bossa(brut, sayiTr(r.brutPrim), 'brut', setBrut, d);
+      bossa(net, sayiTr(r.netPrim), 'net', setNet, d);
+      const arac = `${r.vehicleMake ?? ''} ${r.vehicleModel ?? ''}`.trim();
+      if (arac) bossa(notlar, `Araç: ${arac}`, 'notlar', setNotlar, d);
+      if (d.length === 0) {
+        Alert.alert('Bilgi bulunamadı', 'Belgeden bilgi okunamadı. Bilgileri elle girebilirsiniz.');
+        return;
+      }
+      setAiAlanlar(prev => new Set([...prev, ...d]));
+      setAiSayi(n => n + d.length);
+      setAiUyariGizli(false);
+      setBelge({ uri: hazir.uri, mime: hazir.mime, tur: turu });
+    } catch (e: any) {
+      if (e?.message !== OTURUM_HATASI) Alert.alert('Hata', e?.message || 'Belge okunamadı.');
+    } finally {
+      setOkuyor(false);
+    }
+  };
+
+  const resimSec = async (turu: BelgeTuru, kamera: boolean) => {
+    const izin = kamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!izin.granted) return izinYok();
+    const secenek: ImagePicker.ImagePickerOptions = { mediaTypes: 'images', allowsEditing: false, quality: 1 };
+    const r = kamera
+      ? await ImagePicker.launchCameraAsync(secenek)
+      : await ImagePicker.launchImageLibraryAsync(secenek);
+    if (r.canceled || !r.assets?.[0]) return;
+    const a = r.assets[0];
+    await belgeIsle(a.uri, a.mimeType || 'image/jpeg', turu);
+  };
+
+  const pdfSec = async (turu: BelgeTuru) => {
+    const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+    if (r.canceled || !r.assets?.[0]) return;
+    await belgeIsle(r.assets[0].uri, 'application/pdf', turu);
+  };
+
+  const kaynakSec = (turu: BelgeTuru) => {
+    const butonlar: ButonTipi[] = [
+      { text: 'Kamera', onPress: () => { resimSec(turu, true).catch(() => Alert.alert('Hata', 'Kamera açılamadı.')); } },
+      { text: 'Galeri', onPress: () => { resimSec(turu, false).catch(() => Alert.alert('Hata', 'Galeri açılamadı.')); } },
+      { text: 'PDF Dosyası', onPress: () => { pdfSec(turu).catch(() => Alert.alert('Hata', 'Dosya seçilemedi.')); } },
+    ];
+    if (Platform.OS === 'ios') butonlar.push({ text: 'Vazgeç', style: 'cancel' });
+    Alert.alert('Kaynak', undefined, butonlar, { cancelable: true });
+  };
+
+  const belgedenDoldur = () => {
+    const butonlar: ButonTipi[] = [
+      { text: 'Poliçe', onPress: () => kaynakSec('Poliçe') },
+      { text: 'Ruhsat', onPress: () => kaynakSec('Ruhsat') },
+    ];
+    if (Platform.OS === 'ios') butonlar.push({ text: 'Vazgeç', style: 'cancel' });
+    Alert.alert('Belge türü', undefined, butonlar, { cancelable: true });
   };
 
   const ekran = (
@@ -208,14 +337,45 @@ export default function PoliceFormScreen() {
       {ekran}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
 
+        {!duzenleme && (
+          <View style={{ marginBottom: 12 }}>
+            <TouchableOpacity style={[styles.belgeButon, (okuyor || kaydediliyor) && { opacity: 0.6 }]}
+              onPress={belgedenDoldur} disabled={okuyor || kaydediliyor}>
+              <Text style={styles.belgeButonYazi}>📷 Belgeden doldur</Text>
+            </TouchableOpacity>
+            <Text style={styles.ipucu}>Poliçe veya ruhsat fotoğrafından bilgiler otomatik doldurulur.</Text>
+            {aiSayi > 0 && !aiUyariGizli && (
+              <View style={styles.aiUyari}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.aiUyariYazi}>Yapay zekâ ile dolduruldu — kaydetmeden önce bilgileri kontrol edin.</Text>
+                  <Text style={styles.aiUyariAlt}>{aiSayi} alan dolduruldu</Text>
+                </View>
+                <TouchableOpacity onPress={() => setAiUyariGizli(true)} hitSlop={8}>
+                  <Text style={styles.aiKapat}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {belge && (
+              <View style={styles.belgeSatir}>
+                <Text style={styles.belgeSatirYazi}>
+                  📎 Belge kaydedilince poliçeye eklenecek ({belge.tur === 'Ruhsat' ? 'Ruhsat' : 'Poliçe Belgesi'})
+                </Text>
+                <TouchableOpacity onPress={() => setBelge(null)} hitSlop={8}>
+                  <Text style={styles.link}>Kaldır</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={styles.kart}>
           <Text style={styles.baslik}>Müşteri</Text>
           <Text style={styles.etiket}>Ad Soyad *</Text>
-          <TextInput style={[styles.input, !!hatalar.ad && styles.inputHata]} value={ad} onChangeText={setAd}
+          <TextInput style={[styles.input, aiStil('ad'), !!hatalar.ad && styles.inputHata]} value={ad} onChangeText={yaz('ad', setAd)}
             placeholder="Ad Soyad" placeholderTextColor="#9CA3AF" />
           {hata('ad')}
           <Text style={styles.etiket}>Telefon</Text>
-          <TextInput style={styles.input} value={telefon} onChangeText={setTelefon} keyboardType="phone-pad"
+          <TextInput style={[styles.input, aiStil('telefon')]} value={telefon} onChangeText={yaz('telefon', setTelefon)} keyboardType="phone-pad"
             placeholder="05xx xxx xx xx" placeholderTextColor="#9CA3AF" />
           <Text style={styles.etiket}>E-posta</Text>
           <TextInput style={[styles.input, !!hatalar.eposta && styles.inputHata]} value={eposta} onChangeText={setEposta}
@@ -223,7 +383,7 @@ export default function PoliceFormScreen() {
             placeholder="ornek@eposta.com" placeholderTextColor="#9CA3AF" />
           {hata('eposta')}
           <Text style={styles.etiket}>TC / VKN</Text>
-          <TextInput style={styles.input} value={tc} onChangeText={t => setTc(t.replace(/\D/g, ''))}
+          <TextInput style={[styles.input, aiStil('tc')]} value={tc} onChangeText={yaz('tc', t => setTc(t.replace(/\D/g, '')))}
             keyboardType="number-pad" maxLength={11} placeholder="TC Kimlik No / Vergi No" placeholderTextColor="#9CA3AF" />
         </View>
 
@@ -232,7 +392,7 @@ export default function PoliceFormScreen() {
           <Text style={styles.etiket}>Poliçe Türü *</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {turListesi.map(t => (
-              <TouchableOpacity key={t} style={[styles.chip, tur === t && styles.chipAktif]} onPress={() => setTur(t)}>
+              <TouchableOpacity key={t} style={[styles.chip, tur === t && styles.chipAktif, tur === t && aiAlanlar.has('tur') && styles.chipAi]} onPress={() => { setTur(t); aiSil('tur'); }}>
                 <Text style={[styles.chipYazi, tur === t && styles.chipYaziAktif]}>{t}</Text>
               </TouchableOpacity>
             ))}
@@ -245,17 +405,17 @@ export default function PoliceFormScreen() {
               <Text style={styles.link}>Listeden seç</Text>
             </TouchableOpacity>
           </View>
-          <TextInput style={styles.input} value={sirket} onChangeText={setSirket}
+          <TextInput style={[styles.input, aiStil('sirket')]} value={sirket} onChangeText={yaz('sirket', setSirket)}
             placeholder="Sigorta şirketi" placeholderTextColor="#9CA3AF" />
 
           <Text style={styles.etiket}>Poliçe No</Text>
-          <TextInput style={styles.input} value={policeNo} onChangeText={setPoliceNo}
+          <TextInput style={[styles.input, aiStil('policeNo')]} value={policeNo} onChangeText={yaz('policeNo', setPoliceNo)}
             placeholder="Poliçe numarası" placeholderTextColor="#9CA3AF" />
 
           {plakaGoster && (
             <>
               <Text style={styles.etiket}>Plaka</Text>
-              <TextInput style={styles.input} value={plaka} onChangeText={t => setPlaka(t.toLocaleUpperCase('tr-TR'))} autoCapitalize="characters"
+              <TextInput style={[styles.input, aiStil('plaka')]} value={plaka} onChangeText={yaz('plaka', t => setPlaka(t.toLocaleUpperCase('tr-TR')))} autoCapitalize="characters"
                 autoCorrect={false} placeholder="34 ABC 123" placeholderTextColor="#9CA3AF" />
             </>
           )}
@@ -266,8 +426,8 @@ export default function PoliceFormScreen() {
               <Text style={styles.kucukChipYazi}>Bugün</Text>
             </TouchableOpacity>
           </View>
-          <TextInput style={[styles.input, !!hatalar.baslangic && styles.inputHata]} value={baslangic}
-            onChangeText={t => setBaslangic(tarihMaske(t))} keyboardType="number-pad" maxLength={10}
+          <TextInput style={[styles.input, aiStil('baslangic'), !!hatalar.baslangic && styles.inputHata]} value={baslangic}
+            onChangeText={yaz('baslangic', t => setBaslangic(tarihMaske(t)))} keyboardType="number-pad" maxLength={10}
             placeholder="GG.AA.YYYY" placeholderTextColor="#9CA3AF" />
           {hata('baslangic')}
 
@@ -279,8 +439,8 @@ export default function PoliceFormScreen() {
               <Text style={styles.kucukChipYazi}>+1 yıl</Text>
             </TouchableOpacity>
           </View>
-          <TextInput style={[styles.input, !!hatalar.bitis && styles.inputHata]} value={bitis}
-            onChangeText={t => setBitis(tarihMaske(t))} keyboardType="number-pad" maxLength={10}
+          <TextInput style={[styles.input, aiStil('bitis'), !!hatalar.bitis && styles.inputHata]} value={bitis}
+            onChangeText={yaz('bitis', t => setBitis(tarihMaske(t)))} keyboardType="number-pad" maxLength={10}
             placeholder="GG.AA.YYYY" placeholderTextColor="#9CA3AF" />
           {hata('bitis')}
         </View>
@@ -288,11 +448,11 @@ export default function PoliceFormScreen() {
         <View style={styles.kart}>
           <Text style={styles.baslik}>Prim ve Komisyon</Text>
           <Text style={styles.etiket}>Brüt Prim</Text>
-          <TextInput style={[styles.input, !!hatalar.brut && styles.inputHata]} value={brut} onChangeText={setBrut}
+          <TextInput style={[styles.input, aiStil('brut'), !!hatalar.brut && styles.inputHata]} value={brut} onChangeText={yaz('brut', setBrut)}
             keyboardType="decimal-pad" placeholder="0,00" placeholderTextColor="#9CA3AF" />
           {hata('brut')}
           <Text style={styles.etiket}>Net Prim</Text>
-          <TextInput style={[styles.input, !!hatalar.net && styles.inputHata]} value={net} onChangeText={setNet}
+          <TextInput style={[styles.input, aiStil('net'), !!hatalar.net && styles.inputHata]} value={net} onChangeText={yaz('net', setNet)}
             keyboardType="decimal-pad" placeholder="0,00" placeholderTextColor="#9CA3AF" />
           {hata('net')}
           <Text style={styles.etiket}>Acente Komisyonu</Text>
@@ -307,16 +467,26 @@ export default function PoliceFormScreen() {
 
         <View style={styles.kart}>
           <Text style={styles.baslik}>Notlar</Text>
-          <TextInput style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]} value={notlar}
-            onChangeText={setNotlar} multiline placeholder="Notlar" placeholderTextColor="#9CA3AF" />
+          <TextInput style={[styles.input, aiStil('notlar'), { minHeight: 90, textAlignVertical: 'top' }]} value={notlar}
+            onChangeText={yaz('notlar', setNotlar)} multiline placeholder="Notlar" placeholderTextColor="#9CA3AF" />
         </View>
       </ScrollView>
 
       <View style={styles.altBar}>
-        <TouchableOpacity style={[styles.kaydetButon, kaydediliyor && { opacity: 0.6 }]} onPress={kaydet} disabled={kaydediliyor}>
+        <TouchableOpacity style={[styles.kaydetButon, (kaydediliyor || okuyor) && { opacity: 0.6 }]} onPress={kaydet} disabled={kaydediliyor || okuyor}>
           {kaydediliyor ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.kaydetYazi}>Kaydet</Text>}
         </TouchableOpacity>
       </View>
+
+      <Modal visible={okuyor} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.okuArka}>
+          <View style={styles.okuKart}>
+            <ActivityIndicator size="large" color="#2563EB" />
+            <Text style={styles.okuBaslik}>Belge okunuyor…</Text>
+            <Text style={styles.okuAlt}>Bu işlem birkaç saniye sürebilir.</Text>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={modalAcik} animationType="slide" onRequestClose={() => setModalAcik(false)}>
         <View style={styles.modal}>
@@ -374,5 +544,20 @@ const styles = StyleSheet.create({
   modalBaslik: { fontSize: 16, fontWeight: '700', color: '#1F2937' },
   modalSatir: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#FFFFFF' },
   modalSatirYazi: { fontSize: 14, color: '#1F2937' },
+  inputAi: { backgroundColor: '#FFFBEB', borderColor: '#FCD34D' },
+  chipAi: { borderColor: '#FCD34D' },
+  belgeButon: { borderWidth: 1.5, borderColor: '#2563EB', borderRadius: 12, paddingVertical: 12, alignItems: 'center', backgroundColor: '#FFFFFF' },
+  belgeButonYazi: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
+  ipucu: { fontSize: 12, color: '#6B7280', marginTop: 6, textAlign: 'center' },
+  aiUyari: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 12, padding: 12, marginTop: 12 },
+  aiUyariYazi: { fontSize: 13, color: '#92400E', fontWeight: '600' },
+  aiUyariAlt: { fontSize: 12, color: '#B45309', marginTop: 2 },
+  aiKapat: { fontSize: 16, color: '#92400E', paddingLeft: 12 },
+  belgeSatir: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingHorizontal: 4 },
+  belgeSatirYazi: { flex: 1, fontSize: 12, color: '#6B7280', marginRight: 8 },
+  okuArka: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  okuKart: { backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 24, paddingHorizontal: 32, alignItems: 'center' },
+  okuBaslik: { fontSize: 16, fontWeight: '700', color: '#1F2937', marginTop: 16 },
+  okuAlt: { fontSize: 13, color: '#6B7280', marginTop: 6, textAlign: 'center' },
   bos: { textAlign: 'center', color: '#9CA3AF', padding: 24 },
 });

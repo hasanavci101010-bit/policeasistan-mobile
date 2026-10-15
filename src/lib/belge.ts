@@ -27,7 +27,7 @@ function resimBoyutu(uri: string): Promise<{ width: number; height: number }> {
     Image.getSize(uri, (width, height) => resolve({ width, height }), reject));
 }
 
-async function resimKucult(uri: string): Promise<string> {
+export async function resimKucult(uri: string): Promise<string> {
   const { width } = await resimBoyutu(uri);
   const ctx = ImageManipulator.manipulate(uri);
   if (width > MAX_GENISLIK) ctx.resize({ width: MAX_GENISLIK });
@@ -36,7 +36,7 @@ async function resimKucult(uri: string): Promise<string> {
   return sonuc.uri;
 }
 
-function imzaGecerli(b: Uint8Array, mime: string): boolean {
+export function imzaGecerli(b: Uint8Array, mime: string): boolean {
   const ascii = (bas: number, m: string) => [...m].every((c, i) => b[bas + i] === c.charCodeAt(0));
   if (mime === 'image/jpeg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
   if (mime === 'image/png') return b[0] === 0x89 && ascii(1, 'PNG');
@@ -45,7 +45,7 @@ function imzaGecerli(b: Uint8Array, mime: string): boolean {
   return false;
 }
 
-async function yerelBaytlar(uri: string): Promise<Uint8Array> {
+export async function yerelBaytlar(uri: string): Promise<Uint8Array> {
   const adaylar = [uri];
   try { const d = decodeURI(uri); if (d !== uri) adaylar.push(d); } catch {}
   let son: unknown;
