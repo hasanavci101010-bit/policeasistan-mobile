@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 const API_URL = 'https://policeasistan.com/api';
 
@@ -82,7 +82,11 @@ export default function PolicelerScreen() {
     }
   }, [router]);
 
-  useEffect(() => { yukle(); }, [yukle]);
+  const ilkYuklemeYapildi = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (ilkYuklemeYapildi.current) yukle(true);
+    else { ilkYuklemeYapildi.current = true; yukle(); }
+  }, [yukle]));
 
   const yenile = async () => {
     setYenileniyor(true);
@@ -145,10 +149,16 @@ export default function PolicelerScreen() {
         ))}
       </ScrollView>
 
+      <View style={styles.yeniSatir}>
+        <TouchableOpacity style={styles.yeniButon} onPress={() => router.push('/police/form')}>
+          <Text style={styles.yeniButonText}>+ Yeni Poliçe</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Liste */}
       <ScrollView style={styles.liste} refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={yenile} colors={['#007BFF']} />}>
         {filtrelenmis.map(police => (
-          <TouchableOpacity key={police.id} style={styles.policeKart}>
+          <TouchableOpacity key={police.id} style={styles.policeKart} onPress={() => router.push({ pathname: '/police/[id]', params: { id: String(police.id) } })}>
             <View style={styles.policeKartUst}>
               <Text style={styles.musteriAdi}>{police.musteriAdi}</Text>
               <View style={[styles.tipBadge, { backgroundColor: TIP_RENKLERI[police.tip] || '#F3F4F6' }]}>
@@ -189,6 +199,9 @@ const styles = StyleSheet.create({
   filtreButonAktif: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   filtreText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
   filtreTextAktif: { color: '#FFFFFF' },
+  yeniSatir: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 4 },
+  yeniButon: { backgroundColor: '#2563EB', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  yeniButonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   liste: { flex: 1, padding: 16 },
   policeKart: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   policeKartUst: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
