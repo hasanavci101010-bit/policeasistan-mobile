@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import BelgelerKart from '../../components/BelgelerKart';
 import { apiFetch, isoToTr, OTURUM_HATASI, paraTr, Police } from '../../lib/police';
 
 function SatirGoster({ etiket, deger, onPress }: { etiket: string; deger?: string | null; onPress?: () => void }) {
@@ -138,6 +139,8 @@ export default function PoliceDetayScreen() {
         <SatirGoster etiket="Acente Komisyonu" deger={paraTr(police.acenteKomisyonu)} />
         <SatirGoster etiket="Tali Komisyonu" deger={paraTr(police.taliKomisyonu)} />
       </View>
+
+      <BelgelerKart police={police} onDegisti={() => yukle(true)} />
 
       {!!police.notes && (
         <View style={styles.kart}>

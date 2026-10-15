@@ -36,7 +36,16 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Poliçe belgelerini eklemek için fotoğraflarınıza erişim gerekir.",
+          "cameraPermission": "Poliçe belgelerini fotoğraflamak için kameraya erişim gerekir.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
