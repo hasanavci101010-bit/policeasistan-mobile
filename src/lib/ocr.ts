@@ -2,6 +2,8 @@ import { apiFetch, isoToTr, OTURUM_HATASI, POLICE_TURLERI, SIGORTA_SIRKETLERI, t
 import { imzaGecerli, resimKucult, yerelBaytlar } from './belge';
 
 const OKUMA_HATASI = 'Belge okunamadı. Daha net bir fotoğraf deneyin veya bilgileri elle girin.';
+const ABONELIK_BITTI = 'Aboneliğinizin süresi dolmuş. Bu özelliği kullanamazsınız.';
+const LIMIT_ASILDI = 'Kısa sürede çok fazla belge okundu. Lütfen biraz sonra tekrar deneyin.';
 const ZAMAN_ASIMI = 'Belge okuma zaman aşımına uğradı. Lütfen tekrar deneyin.';
 const MAX_BAYT = 15 * 1024 * 1024;
 
@@ -55,6 +57,8 @@ export async function belgeOku(base64: string, mime: string): Promise<OcrSonuc> 
     });
     if (!res.ok) {
       console.warn('[belgeOku] durum', res.status);
+      if (res.status === 403) throw new Error(ABONELIK_BITTI);
+      if (res.status === 429) throw new Error(LIMIT_ASILDI);
       throw new Error(OKUMA_HATASI);
     }
     const veri = await res.json();
@@ -64,6 +68,8 @@ export async function belgeOku(base64: string, mime: string): Promise<OcrSonuc> 
     if (e?.message === OTURUM_HATASI) throw e;
     if (ac.signal.aborted || e?.name === 'AbortError') throw new Error(ZAMAN_ASIMI);
     if (e?.message === OKUMA_HATASI) throw e;
+    if (e?.message === ABONELIK_BITTI) throw e;
+    if (e?.message === LIMIT_ASILDI) throw e;
     console.warn('[belgeOku]', e?.message ?? e);
     throw new Error(OKUMA_HATASI);
   } finally {
