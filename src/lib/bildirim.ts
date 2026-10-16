@@ -124,3 +124,18 @@ export function useBildirimYonlendirme(): void {
     };
   }, []);
 }
+
+export type BildirimIzni = 'izinli' | 'reddedildi' | 'belirsiz' | 'desteklenmiyor';
+
+export async function bildirimIzniDurumu(): Promise<BildirimIzni> {
+  try {
+    const Notifications = bildirimModulu();
+    if (!Notifications) return 'desteklenmiyor';
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return 'izinli';
+    if (status === 'undetermined') return 'belirsiz';
+    return 'reddedildi';
+  } catch {
+    return 'desteklenmiyor';
+  }
+}

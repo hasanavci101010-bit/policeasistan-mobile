@@ -221,6 +221,14 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.sectionTitle}>Ayarlar</Text>
+      <View style={[styles.linkList, { marginBottom: 24 }]}>
+        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/bildirim-ayarlari' as any)}>
+          <Text style={styles.linkText}>Bildirim Ayarları</Text>
+          <Text style={styles.linkArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
       <Text style={styles.sectionTitle}>Yasal</Text>
       <View style={styles.linkList}>
         {YASAL_BAGLANTILAR.map((b, i) => (
