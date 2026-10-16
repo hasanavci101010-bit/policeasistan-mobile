@@ -4,7 +4,8 @@ import { Tabs, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { bildirimKaydet, bildirimKaydiniSil } from '../../lib/bildirim';
+import { bildirimKaydet } from '../../lib/bildirim';
+import { cikisYap } from '../../lib/oturum';
 
 const API_URL = 'https://policeasistan.com/api';
 
@@ -59,15 +60,6 @@ export default function TabsLayout() {
     return () => { iptal = true; };
   }, []);
 
-  const cikis = async () => {
-    await bildirimKaydiniSil();
-    try {
-      await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
-    } catch {}
-    await AsyncStorage.removeItem('user');
-    router.replace('/');
-  };
-
   if (durum === 'kontrol') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' }}>
@@ -87,7 +79,7 @@ export default function TabsLayout() {
           Hesabınızla ilgili bilgi almak için info@policeasistan.com adresinden bizimle iletişime geçebilirsiniz.
         </Text>
         <TouchableOpacity
-          onPress={cikis}
+          onPress={() => { cikisYap(); }}
           style={{ borderWidth: 1, borderColor: '#D1D5DB', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }}
         >
           <Text style={{ color: '#374151', fontWeight: '600' }}>Çıkış yap</Text>
@@ -124,6 +116,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="musteriler"
         options={{ title: 'Müşteriler', tabBarIcon: ({ color }) => <TabIcon name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="menu"
+        options={{ title: 'Menü', tabBarIcon: ({ color }) => <TabIcon name={{ ios: 'line.3.horizontal', android: 'menu', web: 'menu' }} color={color} /> }}
       />
     </Tabs>
   );

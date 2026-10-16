@@ -1,29 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { bildirimKaydiniSil } from '../../lib/bildirim';
 import { apiFetch, paraTr } from '../../lib/police';
 
 const API_URL = 'https://policeasistan.com/api';
-const SITE_URL = 'https://policeasistan.com';
-
-const YASAL_BAGLANTILAR = [
-  { baslik: 'Gizlilik Politikası', yol: '/gizlilik-politikasi' },
-  { baslik: 'KVKK Aydınlatma Metni', yol: '/kvkk' },
-  { baslik: 'Kullanım Koşulları', yol: '/kullanim-kosullari' },
-];
-
-const HESAP_BAGLANTILARI = [
-  { baslik: 'Prof\u200Cil ve Firma', yol: '/profil' },
-  { baslik: 'Ekip', yol: '/ekip' },
-  { baslik: 'Hasar Dosyaları', yol: '/hasar' },
-  { baslik: 'Bildirim Ayarları', yol: '/bildirim-ayarlari' },
-  { baslik: 'Destek', yol: '/destek' },
-  { baslik: 'Faturalarım', yol: '/faturalar' },
-];
 
 const AY_KISA = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
@@ -115,17 +97,6 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await bildirimKaydiniSil();
-    } catch {
-      // bildirim kaydi silinemese de cikis devam eder
-    }
-    await AsyncStorage.removeItem('user');
-    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
-    router.replace('/');
-  };
-
   const vadeAc = (sekme: 'yaklasan' | 'gecmis') =>
     router.push({ pathname: '/vadeler', params: { sekme } } as any);
 
@@ -153,9 +124,6 @@ export default function DashboardScreen() {
           <Text style={styles.userName}>{user?.fullName}</Text>
           <Text style={styles.companyName}>{user?.companyName}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Çıkış</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.planCard}>
@@ -220,42 +188,22 @@ export default function DashboardScreen() {
 
       <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
       <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/policeler')}>
-          <SymbolView name={{ ios: 'doc.text.fill', android: 'description', web: 'description' }} tintColor="#2563EB" size={32} style={styles.actionIcon} />
+        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/policeler' as any)}>
+          <SymbolView name={{ ios: 'doc.text.fill', android: 'description', web: 'description' }} tintColor="#2563EB" size={26} style={styles.actionIcon} />
           <Text style={styles.actionText}>Poliçeler</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/musteriler')}>
-          <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor="#2563EB" size={32} style={styles.actionIcon} />
+        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(tabs)/musteriler' as any)}>
+          <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor="#2563EB" size={26} style={styles.actionIcon} />
           <Text style={styles.actionText}>Müşteriler</Text>
         </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>Hesap</Text>
-      <View style={[styles.linkList, { marginBottom: 24 }]}>
-        {HESAP_BAGLANTILARI.map((b, i) => (
-          <TouchableOpacity
-            key={b.yol}
-            style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
-            onPress={() => router.push(b.yol as any)}
-          >
-            <Text style={styles.linkText}>{b.baslik}</Text>
-            <Text style={styles.linkArrow}>›</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.sectionTitle}>Yasal</Text>
-      <View style={styles.linkList}>
-        {YASAL_BAGLANTILAR.map((b, i) => (
-          <TouchableOpacity
-            key={b.yol}
-            style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
-            onPress={() => WebBrowser.openBrowserAsync(SITE_URL + b.yol)}
-          >
-            <Text style={styles.linkText}>{b.baslik}</Text>
-            <Text style={styles.linkArrow}>›</Text>
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/vadeler' as any)}>
+          <SymbolView name={{ ios: 'calendar.badge.clock', android: 'event', web: 'event' }} tintColor="#2563EB" size={26} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Vade Takibi</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/hasar' as any)}>
+          <SymbolView name={{ ios: 'car.fill', android: 'car_crash', web: 'car_crash' }} tintColor="#2563EB" size={26} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Hasar</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -288,8 +236,6 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, color: '#6B7280' },
   userName: { fontSize: 22, fontWeight: '700', color: '#1F2937' },
   companyName: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  logoutBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  logoutText: { color: '#DC2626', fontSize: 13, fontWeight: '600' },
   planCard: { backgroundColor: '#2563EB', borderRadius: 16, padding: 20, marginBottom: 24 },
   planLabel: { color: '#BFDBFE', fontSize: 13 },
   planName: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', marginTop: 4 },
@@ -315,13 +261,8 @@ const styles = StyleSheet.create({
   bar: { width: 22, borderRadius: 4 },
   barEtiket: { fontSize: 10, color: '#9CA3AF', marginTop: 6 },
   barEtiketAktif: { color: '#2563EB', fontWeight: '700' },
-  quickActions: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  actionCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  actionIcon: { width: 32, height: 32, marginBottom: 8 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 32 },
+  actionCard: { width: '47.5%', flexGrow: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  actionIcon: { width: 26, height: 26, marginBottom: 6 },
   actionText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  linkList: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 40 },
-  linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
-  linkRowBorder: { borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  linkText: { fontSize: 14, color: '#1F2937' },
-  linkArrow: { fontSize: 20, color: '#9CA3AF' },
 });
