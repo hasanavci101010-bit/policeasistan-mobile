@@ -181,3 +181,146 @@ export function bugunIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+// ---- Hasar fotoğrafları ----
+export type HasarFoto = { id: number; boyut: number; createdAt: string };
+export const FOTO_LIMIT = 50;
+const FOTO_YUKLEME_HATASI = 'Fotoğraf yüklenemedi. Lütfen tekrar deneyin.';
+const FOTO_GRUP = 5;
+const fotoOnbellek = new Map<string, { mime: string; base64: string }>();
+
+async function hataMesaji(res: Response, varsayilan: string): Promise<string> {
+  const g = await res.json().catch(() => null);
+  return typeof g?.error === 'string' && g.error ? g.error : varsayilan;
+}
+
+export async function fotoListele(id: number | string): Promise<HasarFoto[]> {
+  const res = await fetch(`${API_URL}/hasar-takip/${id}/fotograflar`, { credentials: 'include' });
+  await oturumKontrol(res);
+  if (!res.ok) throw new Error(await hataMesaji(res, 'Fotoğraflar yüklenemedi.'));
+  const liste = await res.json();
+  return Array.isArray(liste) ? liste : [];
+}
+
+export async function fotoIndir(
+  id: number | string, fotoId: number | string, kucuk: boolean,
+): Promise<{ mime: string; base64: string }> {
+  const anahtar = `${id}/${fotoId}/${kucuk ? 'k' : 'b'}`;
+  const var_ = fotoOnbellek.get(anahtar);
+  if (var_) return var_;
+  const res = await fetch(
+    `${API_URL}/hasar-takip/${id}/fotograflar/${fotoId}${kucuk ? '?boyut=kucuk' : ''}`,
+    { credentials: 'include' },
+  );
+  await oturumKontrol(res);
+  if (!res.ok) throw new Error('Fotoğraf yüklenemedi.');
+  const blob = await res.blob();
+  const mime = (res.headers.get('content-type') || blob.type || 'image/jpeg').split(';')[0].trim().toLowerCase();
+  const base64 = await blobBase64(blob);
+  if (Math.floor(base64.length * 3 / 4) < 100 || !mime.startsWith('image/')) throw new Error('Fotoğraf yüklenemedi.');
+  const sonuc = { mime, base64 };
+  fotoOnbellek.set(anahtar, sonuc);
+  return sonuc;
+}
+
+export async function fotoSil(id: number | string, fotoId: number | string): Promise<void> {
+  const res = await fetch(`${API_URL}/hasar-takip/${id}/fotograflar/${fotoId}`, {
+    method: 'DELETE', credentials: 'include',
+  });
+  await oturumKontrol(res);
+  if (!res.ok) throw new Error(await hataMesaji(res, 'Fotoğraf silinemedi.'));
+  fotoOnbellek.delete(`${id}/${fotoId}/k`);
+  fotoOnbellek.delete(`${id}/${fotoId}/b`);
+}
+
+function cokluMultipartOlustur(dosyalar: { ad: string; mime: string; bytes: Uint8Array }[]) {
+  const sinir = '----PoliceAsistan' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const n = '\r\n';
+  const parcalar: Uint8Array[] = [];
+  dosyalar.forEach((d, i) => {
+    const ad = d.ad.replace(/[^A-Za-z0-9._-]+/g, '_') || `foto${i}.jpg`;
+    parcalar.push(ascii(
+      '--' + sinir + n + 'Content-Disposition: form-data; name="files"; filename="' + ad + '"' + n +
+      'Content-Type: ' + d.mime + n + n));
+    parcalar.push(d.bytes);
+    parcalar.push(ascii(n));
+  });
+  parcalar.push(ascii('--' + sinir + '--' + n));
+  const toplam = parcalar.reduce((t, p) => t + p.length, 0);
+  const govde = new Uint8Array(toplam);
+  let konum = 0;
+  for (const p of parcalar) { govde.set(p, konum); konum += p.length; }
+  return { govde, sinir };
+}
+
+type FotoYanit = { fotograflar: HasarFoto[]; eklenen: number; atlanan: number };
+
+function fotoGonder(url: string, sinir: string, govde: Uint8Array): Promise<FotoYanit> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.withCredentials = true;
+    xhr.timeout = 120000;
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader('Content-Type', `multipart/form-data; boundary=${sinir}`);
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error(FOTO_YUKLEME_HATASI)); }
+      } else if (xhr.status === 401) {
+        await AsyncStorage.removeItem('user');
+        router.replace('/');
+        reject(new Error(OTURUM_HATASI));
+      } else {
+        let mesaj = xhr.status === 413 ? COK_BUYUK : FOTO_YUKLEME_HATASI;
+        try { const g = JSON.parse(xhr.responseText); if (typeof g?.error === 'string' && g.error) mesaj = g.error; } catch {}
+        console.warn('[fotoYukle] HTTP', xhr.status, xhr.responseText);
+        reject(new Error(mesaj));
+      }
+    };
+    xhr.onerror = () => reject(new Error(FOTO_YUKLEME_HATASI));
+    xhr.ontimeout = () => reject(new Error(FOTO_YUKLEME_HATASI));
+    xhr.send(govde as any);
+  });
+}
+
+export async function fotoYukle(
+  id: number | string, uris: string[], ilerleme?: (yapilan: number, toplam: number) => void,
+): Promise<FotoYanit> {
+  const toplam = uris.length;
+  let eklenen = 0, atlanan = 0;
+  let fotograflar: HasarFoto[] = [];
+  let yapilan = 0;
+  ilerleme?.(0, toplam);
+  try {
+    for (let b = 0; b < uris.length; b += FOTO_GRUP) {
+      const grup = uris.slice(b, b + FOTO_GRUP);
+      const dosyalar: { ad: string; mime: string; bytes: Uint8Array }[] = [];
+      for (let i = 0; i < grup.length; i++) {
+        try {
+          const kucuk = await resimKucult(grup[i]);
+          const bytes = await yerelBaytlar(kucuk);
+          if (bytes.byteLength < 100 || !imzaGecerli(bytes, 'image/jpeg')) throw new Error('geçersiz');
+          if (bytes.byteLength > 15 * 1024 * 1024) throw new Error(COK_BUYUK);
+          dosyalar.push({ ad: `foto${b + i + 1}.jpg`, mime: 'image/jpeg', bytes });
+        } catch (e: any) {
+          console.warn('[fotoYukle] hazırlanamadı', e?.message ?? e);
+          atlanan++;
+        }
+      }
+      if (dosyalar.length) {
+        const { govde, sinir } = cokluMultipartOlustur(dosyalar);
+        const y = await fotoGonder(`${API_URL}/hasar-takip/${id}/fotograflar`, sinir, govde);
+        eklenen += y.eklenen ?? 0;
+        atlanan += y.atlanan ?? 0;
+        if (Array.isArray(y.fotograflar)) fotograflar = y.fotograflar;
+      }
+      yapilan += grup.length;
+      ilerleme?.(yapilan, toplam);
+    }
+    return { eklenen, atlanan, fotograflar };
+  } catch (e: any) {
+    if (e?.message === OTURUM_HATASI || e?.message === COK_BUYUK) throw e;
+    // sunucu mesajı veya genel hata
+    throw new Error(e?.message || FOTO_YUKLEME_HATASI);
+  }
+}

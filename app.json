@@ -39,8 +39,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Poliçe belgelerini eklemek için fotoğraflarınıza erişim gerekir.",
-          "cameraPermission": "Poliçe belgelerini fotoğraflamak için kameraya erişim gerekir.",
+          "photosPermission": "Poliçe belgelerini ve hasar fotoğraflarını eklemek için fotoğraflarınıza erişim gerekir.",
+          "cameraPermission": "Poliçe belgelerini ve hasar fotoğraflarını çekmek için kameraya erişim gerekir.",
           "microphonePermission": false
         }
       ],
