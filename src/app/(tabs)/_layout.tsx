@@ -4,6 +4,7 @@ import { Tabs, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { bildirimKaydet, bildirimKaydiniSil } from '../../lib/bildirim';
 
 const API_URL = 'https://policeasistan.com/api';
 
@@ -37,7 +38,11 @@ export default function TabsLayout() {
         }
         if (res.ok) {
           const u = await res.json();
-          if (!iptal) setDurum(abonelikAktifMi(u) ? 'aktif' : 'pasif');
+          if (!iptal) {
+            const aktif = abonelikAktifMi(u);
+            setDurum(aktif ? 'aktif' : 'pasif');
+            if (aktif) bildirimKaydet();
+          }
           return;
         }
       } catch {}
@@ -55,6 +60,7 @@ export default function TabsLayout() {
   }, []);
 
   const cikis = async () => {
+    await bildirimKaydiniSil();
     try {
       await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch {}

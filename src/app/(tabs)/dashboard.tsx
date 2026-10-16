@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { bildirimKaydiniSil } from '../../lib/bildirim';
+import { apiFetch, paraTr } from '../../lib/police';
 
 const API_URL = 'https://policeasistan.com/api';
 const SITE_URL = 'https://policeasistan.com';
@@ -13,6 +15,8 @@ const YASAL_BAGLANTILAR = [
   { baslik: 'KVKK Aydınlatma Metni', yol: '/kvkk' },
   { baslik: 'Kullanım Koşulları', yol: '/kullanim-kosullari' },
 ];
+
+const AY_KISA = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
 interface User {
   fullName: string;
@@ -28,16 +32,41 @@ interface Summary {
   totalAcenteKomisyonu: number;
 }
 
+type AyVeri = { key: string; ay: number; yil: number; brutPrim: number; adet: number };
+
+// Son 12 ayi (bu ay dahil) eskiden yeniye uretir, API satirlariyla doldurur
+function aylikHazirla(satirlar: any[]): AyVeri[] {
+  const harita = new Map<string, { brutPrim: number; adet: number }>();
+  for (const r of satirlar) {
+    if (r?.month) harita.set(String(r.month), { brutPrim: Number(r.brut_prim ?? 0) || 0, adet: Number(r.count ?? 0) || 0 });
+  }
+  const simdi = new Date();
+  const out: AyVeri[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(simdi.getFullYear(), simdi.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const v = harita.get(key);
+    out.push({ key, ay: d.getMonth(), yil: d.getFullYear(), brutPrim: v?.brutPrim ?? 0, adet: v?.adet ?? 0 });
+  }
+  return out;
+}
+
 export default function DashboardScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [aylik, setAylik] = useState<AyVeri[]>([]);
+  const [seciliAy, setSeciliAy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const ilkRef = useRef(true);
+  const grafikRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useFocusEffect(useCallback(() => {
+    const sessiz = !ilkRef.current;
+    ilkRef.current = false;
+    fetchData(sessiz);
+  }, []));
 
-  const fetchData = async () => {
+  const fetchData = async (sessiz: boolean) => {
     try {
       const stored = await AsyncStorage.getItem('user');
       if (!stored) {
@@ -60,18 +89,36 @@ export default function DashboardScreen() {
         const summaryData = await summaryRes.json();
         setSummary(summaryData);
       }
+
+      try {
+        const aylikRes = await apiFetch('/dashboard/monthly-stats');
+        if (aylikRes.ok) {
+          const rows = await aylikRes.json();
+          setAylik(aylikHazirla(Array.isArray(rows) ? rows : []));
+        }
+      } catch {
+        // grafik opsiyonel: mevcut veri korunur
+      }
     } catch {
-      router.replace('/');
+      if (!sessiz) router.replace('/');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
+    try {
+      await bildirimKaydiniSil();
+    } catch {
+      // bildirim kaydi silinemese de cikis devam eder
+    }
     await AsyncStorage.removeItem('user');
     await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
     router.replace('/');
   };
+
+  const vadeAc = (sekme: 'yaklasan' | 'gecmis') =>
+    router.push({ pathname: '/vadeler', params: { sekme } } as any);
 
   if (loading) {
     return (
@@ -81,6 +128,13 @@ export default function DashboardScreen() {
       </View>
     );
   }
+
+  const veriVar = aylik.some(a => a.brutPrim > 0 || a.adet > 0);
+  const primModu = aylik.some(a => a.brutPrim > 0);
+  const deger = (a: AyVeri) => (primModu ? a.brutPrim : a.adet);
+  const enBuyuk = Math.max(1, ...aylik.map(deger));
+  const secili = aylik.find(a => a.key === seciliAy) ?? aylik[aylik.length - 1];
+  const GRAFIK_YUKSEKLIK = 120;
 
   return (
     <ScrollView style={styles.container}>
@@ -110,19 +164,49 @@ export default function DashboardScreen() {
           <Text style={styles.statNumber}>{summary?.totalPolicies ?? 0}</Text>
           <Text style={styles.statLabel}>Toplam Poliçe</Text>
         </View>
-        <View style={[styles.statCard, styles.statCardWarning]}>
+        <TouchableOpacity style={[styles.statCard, styles.statCardWarning]} onPress={() => vadeAc('yaklasan')}>
           <Text style={[styles.statNumber, styles.statNumberWarning]}>{summary?.urgentPolicies ?? 0}</Text>
           <Text style={styles.statLabel}>Yaklaşan Vade</Text>
-        </View>
-        <View style={[styles.statCard, styles.statCardDanger]}>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.statCard, styles.statCardDanger]} onPress={() => vadeAc('gecmis')}>
           <Text style={[styles.statNumber, styles.statNumberDanger]}>{summary?.expiredPolicies ?? 0}</Text>
           <Text style={styles.statLabel}>Vadesi Geçmiş</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.komisyonCard}>
         <Text style={styles.komisyonLabel}>Toplam Acente Komisyonu</Text>
         <Text style={styles.komisyonAmount}>₺{Number(summary?.totalAcenteKomisyonu ?? 0).toLocaleString('tr-TR')}</Text>
+      </View>
+
+      <View style={styles.grafikCard}>
+        <Text style={styles.komisyonLabel}>Aylık Üretim</Text>
+        {!veriVar || !secili ? (
+          <Text style={styles.grafikBos}>Henüz veri yok</Text>
+        ) : (
+          <>
+            <Text style={styles.grafikDeger}>
+              {primModu ? paraTr(secili.brutPrim) : `${secili.adet} poliçe`}
+            </Text>
+            <Text style={styles.grafikAltDeger}>
+              {AY_KISA[secili.ay]} {secili.yil} · {secili.adet} poliçe{primModu ? '' : ' (prim verisi yok)'}
+            </Text>
+            <ScrollView ref={grafikRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.grafikIc} onContentSizeChange={() => grafikRef.current?.scrollToEnd({ animated: false })}>
+              {aylik.map(a => {
+                const aktif = a.key === secili.key;
+                const h = Math.max(deger(a) > 0 ? 4 : 2, Math.round((deger(a) / enBuyuk) * GRAFIK_YUKSEKLIK));
+                return (
+                  <TouchableOpacity key={a.key} style={styles.barKolon} onPress={() => setSeciliAy(a.key)} activeOpacity={0.7}>
+                    <View style={{ height: GRAFIK_YUKSEKLIK, justifyContent: 'flex-end' }}>
+                      <View style={[styles.bar, { height: h, backgroundColor: aktif ? '#2563EB' : '#BFDBFE' }]} />
+                    </View>
+                    <Text style={[styles.barEtiket, aktif && styles.barEtiketAktif]}>{AY_KISA[a.ay]}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
       </View>
 
       <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
@@ -196,9 +280,18 @@ const styles = StyleSheet.create({
   statNumberWarning: { color: '#D97706' },
   statNumberDanger: { color: '#DC2626' },
   statLabel: { fontSize: 11, color: '#6B7280', marginTop: 4, textAlign: 'center' },
-  komisyonCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#E5E7EB' },
+  komisyonCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
   komisyonLabel: { fontSize: 13, color: '#6B7280' },
   komisyonAmount: { fontSize: 28, fontWeight: '700', color: '#059669', marginTop: 4 },
+  grafikCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#E5E7EB' },
+  grafikBos: { fontSize: 14, color: '#9CA3AF', marginTop: 12 },
+  grafikDeger: { fontSize: 24, fontWeight: '700', color: '#1F2937', marginTop: 4 },
+  grafikAltDeger: { fontSize: 12, color: '#9CA3AF', marginTop: 2, marginBottom: 12 },
+  grafikIc: { alignItems: 'flex-end', gap: 6 },
+  barKolon: { width: 36, alignItems: 'center' },
+  bar: { width: 22, borderRadius: 4 },
+  barEtiket: { fontSize: 10, color: '#9CA3AF', marginTop: 6 },
+  barEtiketAktif: { color: '#2563EB', fontWeight: '700' },
   quickActions: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   actionCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
   actionIcon: { width: 32, height: 32, marginBottom: 8 },

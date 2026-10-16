@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import BelgelerKart from '../../components/BelgelerKart';
 import { apiFetch, isoToTr, OTURUM_HATASI, paraTr, Police } from '../../lib/police';
@@ -28,6 +28,8 @@ export default function PoliceDetayScreen() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState('');
   const yuklendi = useRef(false);
+  const [islemde, setIslemde] = useState(false);
+  const islemdeRef = useRef(false);
 
   const yukle = useCallback(async (sessiz = false) => {
     if (!sessiz) setYukleniyor(true);
@@ -47,7 +49,52 @@ export default function PoliceDetayScreen() {
 
   useFocusEffect(useCallback(() => { yukle(yuklendi.current); }, [yukle]));
 
-  const duzenle = () => router.push({ pathname: '/police/form', params: { id: String(id) } });
+  const islemYap = async (yol: string, method: 'PATCH' | 'DELETE', hataMetni: string, sonra: () => Promise<void> | void) => {
+    if (islemdeRef.current) return;
+    islemdeRef.current = true;
+    setIslemde(true);
+    try {
+      const res = await apiFetch(yol, { method });
+      if (!res.ok) {
+        let mesaj = '';
+        try { mesaj = (await res.json())?.error || ''; } catch {}
+        const goster = method === 'DELETE' ? (res.status === 403 && mesaj ? mesaj : hataMetni) : (mesaj || hataMetni);
+        Alert.alert('Hata', goster);
+        return;
+      }
+      await sonra();
+    } catch (e: any) {
+      if (e?.message !== OTURUM_HATASI) Alert.alert('Hata', hataMetni);
+    } finally {
+      islemdeRef.current = false;
+      setIslemde(false);
+    }
+  };
+
+  const iptalEt = () => {
+    Alert.alert('Poliçe iptal edilsin mi?', 'İptal edilen poliçe listede kalır ancak aktif sayılmaz.', [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'İptal et', style: 'destructive', onPress: () => { islemYap(`/policies/${id}/iptal`, 'PATCH', 'İşlem yapılamadı.', () => yukle(true)); } },
+    ], { cancelable: true });
+  };
+
+  const sil = () => {
+    Alert.alert('Poliçe kalıcı olarak silinsin mi?', 'Bu işlem geri alınamaz. Poliçeye bağlı hasar kayıtları da silinir. Poliçeyi yalnızca pasif yapmak istiyorsanız "⋯" menüsündeki "Poliçeyi iptal et" seçeneğini kullanın.', [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Sil', style: 'destructive', onPress: () => { islemYap(`/policies/${id}`, 'DELETE', 'Silinemedi.', () => { router.back(); }); } },
+    ], { cancelable: true });
+  };
+
+  const islemler = () => {
+    if (islemdeRef.current) return;
+    const butonlar: any[] = [];
+    if (police?.status !== 'iptal') butonlar.push({ text: 'Poliçeyi iptal et', onPress: iptalEt });
+    butonlar.push({ text: 'Poliçeyi sil', style: 'destructive', onPress: sil });
+    if (Platform.OS === 'ios') butonlar.push({ text: 'Vazgeç', style: 'cancel' });
+    Alert.alert('Poliçe işlemleri', undefined, butonlar, { cancelable: true });
+  };
+
+  const duzenle =() => router.push({ pathname: '/police/form', params: { id: String(id) } });
 
   const ekran = (
     <Stack.Screen
@@ -55,9 +102,18 @@ export default function PoliceDetayScreen() {
         headerShown: true,
         title: 'Poliçe Detayı',
         headerRight: () => (
-          <TouchableOpacity onPress={duzenle} hitSlop={8}>
-            <Text style={styles.duzenle}>Düzenle</Text>
-          </TouchableOpacity>
+          <View style={styles.headerSag}>
+            <TouchableOpacity onPress={duzenle} hitSlop={8} disabled={islemde}>
+              <Text style={styles.duzenle}>Düzenle</Text>
+            </TouchableOpacity>
+            {islemde ? (
+              <ActivityIndicator size="small" color="#2563EB" style={styles.menuAlan} />
+            ) : (
+              <TouchableOpacity onPress={islemler} hitSlop={8} style={styles.menuAlan}>
+                <Text style={styles.menuYazi}>⋯</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ),
       }}
     />
@@ -99,10 +155,15 @@ export default function PoliceDetayScreen() {
       <View style={styles.kart}>
         <View style={styles.ustSatir}>
           <Text style={styles.musteriAdi}>{police.customerName}</Text>
-          <View style={styles.tipBadge}><Text style={styles.tipYazi}>{police.policyType}</Text></View>
+          <View style={styles.rozetler}>
+            <View style={styles.tipBadge}><Text style={styles.tipYazi}>{police.policyType}</Text></View>
+            {police.status === 'iptal' && (
+              <View style={styles.iptalBadge}><Text style={styles.iptalYazi}>İptal edildi</Text></View>
+            )}
+          </View>
         </View>
-        {!!police.status && police.status !== 'aktif' && (
-          <Text style={styles.durum}>{police.status === 'iptal' ? 'İptal' : police.status}</Text>
+        {!!police.status && police.status !== 'aktif' && police.status !== 'iptal' && (
+          <Text style={styles.durum}>{police.status}</Text>
         )}
       </View>
 
@@ -158,6 +219,12 @@ const styles = StyleSheet.create({
   hataYazi: { color: '#6B7280', textAlign: 'center', marginBottom: 16 },
   tekrarButon: { backgroundColor: '#2563EB', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   tekrarYazi: { color: '#FFFFFF', fontWeight: '600' },
+  headerSag: { flexDirection: 'row', alignItems: 'center' },
+  menuAlan: { marginLeft: 16, minWidth: 24, alignItems: 'center' },
+  menuYazi: { color: '#2563EB', fontSize: 24, fontWeight: '700', lineHeight: 26 },
+  rozetler: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  iptalBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#FEE2E2' },
+  iptalYazi: { fontSize: 12, fontWeight: '600', color: '#DC2626' },
   duzenle: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
   kart: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   ustSatir: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
