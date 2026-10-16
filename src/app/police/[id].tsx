@@ -209,6 +209,10 @@ export default function PoliceDetayScreen() {
           <Text style={styles.notlar}>{police.notes}</Text>
         </View>
       )}
+
+      <TouchableOpacity style={styles.hasarButon} onPress={() => router.push({ pathname: '/hasar/form', params: { policeId: String(police.id) } })}>
+        <Text style={styles.hasarButonYazi}>Hasar dosyası aç</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -238,4 +242,6 @@ const styles = StyleSheet.create({
   deger: { flex: 1, textAlign: 'right', fontSize: 14, color: '#1F2937', fontWeight: '500' },
   link: { color: '#2563EB' },
   notlar: { fontSize: 14, color: '#1F2937', lineHeight: 20 },
+  hasarButon: { marginTop: 4, backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  hasarButonYazi: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
 });

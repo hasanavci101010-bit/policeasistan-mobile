@@ -1,21 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Linking, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, FlatList, Linking, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { apiFetch, isoToTr, OTURUM_HATASI, Police } from '../lib/police';
-
-const TIP_ADLARI: Record<string, string> = {
-  'trafik': 'Trafik', 'kasko': 'Kasko', 'dask': 'DASK', 'konut': 'Konut',
-  'imm-sorumluluk': 'İMM Sorumluluk', 'ferdi kaza': 'Ferdi Kaza',
-  'yol yardım': 'Yol Yardım', 'sağlık': 'Sağlık', 'saglik': 'Sağlık',
-};
-
-function tipAdi(t: string | null | undefined): string {
-  const ham = (t ?? '').trim();
-  if (!ham) return '';
-  const k = ham.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-  if (TIP_ADLARI[k]) return TIP_ADLARI[k];
-  return k.split(' ').map(w => (w ? (w.charAt(0) === 'i' ? 'İ' : w.charAt(0).toUpperCase()) + w.slice(1) : w)).join(' ');
-}
+import {
+  acenteGetir, basHarfBuyuk, gonderildiIsaretle, gonderilenleriGetir, mesajOlustur,
+  sablonGetir, telNormalize, tipAdi, waAc,
+} from '../lib/whatsapp';
 
 const TIP_RENKLERI: Record<string, string> = {
   'Trafik': '#DBEAFE', 'Kasko': '#D1FAE5', 'DASK': '#FEF3C7', 'Konut': '#EDE9FE', 'Sağlık': '#FCE7F3',
@@ -24,21 +14,23 @@ const TIP_YAZI_RENKLERI: Record<string, string> = {
   'Trafik': '#1D4ED8', 'Kasko': '#065F46', 'DASK': '#92400E', 'Konut': '#5B21B6', 'Sağlık': '#9D174D',
 };
 
-// Turk numarasini 10 haneli 5XXXXXXXXX forma cevirir; olmazsa null
-function telNormalize(s: string | null | undefined): string | null {
-  let d = String(s ?? '').replace(/\D/g, '');
-  if (d.length === 12 && d.startsWith('90')) d = d.slice(2);
-  else if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
-  return d.length === 10 && d.startsWith('5') ? d : null;
-}
-
 function gunBilgi(gun: number): { metin: string; renk: string } {
   if (gun < 0) return { metin: `${-gun} gün geçti`, renk: '#DC2626' };
   if (gun === 0) return { metin: 'Bugün bitiyor', renk: '#D97706' };
   return { metin: `${gun} gün kaldı`, renk: gun <= 30 ? '#D97706' : '#059669' };
 }
 
+// ISO zaman damgasi -> GG.AA
+function ggAa(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 type Sekme = 'yaklasan' | 'gecmis';
+
+type Sira = { kuyruk: Police[]; sonraki: number; sablon: string; acente: string };
 
 async function yaklasanGetir(): Promise<Police[]> {
   const res = await apiFetch('/policies/urgent');
@@ -78,6 +70,15 @@ export default function VadelerScreen() {
   const yuklendiRef = useRef(false);
   const istekRef = useRef(0);
 
+  const [gonderilen, setGonderilen] = useState<Record<string, string>>({});
+  const [secimModu, setSecimModu] = useState(false);
+  const [secili, setSecili] = useState<Record<string, true>>({});
+  const [sira, setSira] = useState<Sira | null>(null);
+  const [modalAcik, setModalAcik] = useState(false);
+  const siraRef = useRef<Sira | null>(null);
+  const donusBekleRef = useRef(false);
+  const oncekiDurumRef = useRef(AppState.currentState);
+
   const yukle = useCallback(async (sessiz: boolean) => {
     const id = ++istekRef.current;
     if (!sessiz) { setYukleniyor(true); setHata(''); }
@@ -104,6 +105,7 @@ export default function VadelerScreen() {
 
   useFocusEffect(useCallback(() => {
     yukle(yuklendiRef.current);
+    gonderilenleriGetir().then(setGonderilen);
   }, [yukle]));
 
   const yenile = async () => {
@@ -114,16 +116,167 @@ export default function VadelerScreen() {
 
   const liste = sekme === 'yaklasan' ? yaklasan : gecmis;
 
+  const siraAyarla = (s: Sira | null) => {
+    siraRef.current = s;
+    setSira(s);
+  };
+
+  const isaretle = async (p: Police) => {
+    await gonderildiIsaretle(p.id).catch(() => {});
+    setGonderilen(await gonderilenleriGetir());
+  };
+
+  // Tek bir policeyi sablonla ac ve gonderildi isaretle; true = acildi
+  const policeAc = async (p: Police, sablon: string, acente: string): Promise<boolean> => {
+    const tel = telNormalize(p.customerPhone);
+    if (!tel) return false;
+    try {
+      await waAc(tel, mesajOlustur(sablon, p, acente));
+    } catch {
+      return false;
+    }
+    await isaretle(p);
+    return true;
+  };
+
+  const tekilWhatsapp = async (p: Police) => {
+    const [sablon, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
+    await policeAc(p, sablon, acente);
+  };
+
+  const secimiKapat = () => {
+    setSecimModu(false);
+    setSecili({});
+  };
+
+  const siraBitir = (mesaj?: string) => {
+    donusBekleRef.current = false;
+    siraAyarla(null);
+    setModalAcik(false);
+    secimiKapat();
+    if (mesaj) Alert.alert('Tamamlandı', mesaj);
+  };
+
+  const siraBaslat = () => {
+    const tumu = [...yaklasan, ...gecmis];
+    const kuyruk = tumu.filter(p => secili[String(p.id)] && telNormalize(p.customerPhone));
+    if (kuyruk.length === 0) return;
+    Alert.alert(
+      'Sırayla Gönder',
+      'WhatsApp açılacak; mesajı gönderip uygulamaya geri dönün.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Başla',
+          onPress: async () => {
+            const [sablon, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
+            const ok = await policeAc(kuyruk[0], sablon, acente);
+            if (!ok) {
+              Alert.alert('Hata', 'WhatsApp açılamadı.');
+              return;
+            }
+            donusBekleRef.current = true;
+            siraAyarla({ kuyruk, sonraki: 1, sablon, acente });
+          },
+        },
+      ],
+    );
+  };
+
+  // Uygulama on plana donunce siradaki karti goster
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', durum => {
+      const onceki = oncekiDurumRef.current;
+      oncekiDurumRef.current = durum;
+      if (durum !== 'active' || onceki === 'active') return;
+      const s = siraRef.current;
+      if (!s || !donusBekleRef.current) return;
+      donusBekleRef.current = false;
+      if (s.sonraki >= s.kuyruk.length) {
+        siraBitir(`${s.kuyruk.length} mesaj için WhatsApp açıldı.`);
+      } else {
+        setModalAcik(true);
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const siraGonder = async () => {
+    const s = siraRef.current;
+    if (!s) return;
+    setModalAcik(false);
+    const p = s.kuyruk[s.sonraki];
+    const ok = await policeAc(p, s.sablon, s.acente);
+    if (!ok) {
+      Alert.alert('Hata', 'WhatsApp açılamadı.');
+      setModalAcik(true);
+      return;
+    }
+    donusBekleRef.current = true;
+    siraAyarla({ ...s, sonraki: s.sonraki + 1 });
+  };
+
+  const siraAtla = () => {
+    const s = siraRef.current;
+    if (!s) return;
+    const yeni = { ...s, sonraki: s.sonraki + 1 };
+    if (yeni.sonraki >= s.kuyruk.length) {
+      siraBitir('Sıra tamamlandı.');
+    } else {
+      siraAyarla(yeni);
+    }
+  };
+
+  const secimAc = (id: string) =>
+    setSecili(m => {
+      const n = { ...m };
+      if (n[id]) delete n[id]; else n[id] = true;
+      return n;
+    });
+
+  const tumunuSec = () => {
+    const n: Record<string, true> = {};
+    for (const p of liste) {
+      if (telNormalize(p.customerPhone) && !gonderilen[String(p.id)]) n[String(p.id)] = true;
+    }
+    setSecili(n);
+  };
+
+  const seciliSayi = Object.keys(secili).length;
+
   const renderSatir = ({ item: p }: { item: Police }) => {
     const gun = gunBilgi(Number(p.daysUntilExpiry ?? 0));
     const tip = tipAdi(p.policyType);
     const tel = telNormalize(p.customerPhone);
     const tarih = isoToTr(p.expiryDate);
-    const ad = (p.customerName ?? '').trim();
-    const mesaj = `Merhaba ${ad}, ${tip} poliçenizin bitiş tarihi ${tarih}. Yenileme için size yardımcı olabilirim.`;
+    const id = String(p.id);
+    const gonderildi = ggAa(gonderilen[id]);
+    const isaretli = !!secili[id];
+    const secilebilir = !!tel;
     return (
-      <TouchableOpacity style={styles.kart} onPress={() => router.push({ pathname: '/police/[id]', params: { id: String(p.id) } })}>
+      <TouchableOpacity
+        style={[styles.kart, secimModu && !secilebilir && { opacity: 0.45 }, secimModu && isaretli && styles.kartSecili]}
+        onPress={() => {
+          if (secimModu) { if (secilebilir) secimAc(id); return; }
+          router.push({ pathname: '/police/[id]', params: { id } });
+        }}
+        accessibilityRole={secimModu ? 'checkbox' : 'button'}
+        accessibilityState={secimModu ? { checked: isaretli, disabled: !secilebilir } : undefined}
+        accessibilityLabel={secimModu ? `${p.customerName}, ${tip}` : undefined}
+      >
         <View style={styles.kartUst}>
+          {secimModu && (
+            <View
+              style={[styles.kutu, isaretli && styles.kutuSecili]}
+              accessible
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isaretli, disabled: !secilebilir }}
+              accessibilityLabel={`${p.customerName} seç`}
+            >
+              {isaretli && <Text style={styles.tik}>✓</Text>}
+            </View>
+          )}
           <Text style={styles.musteriAdi} numberOfLines={1}>{p.customerName}</Text>
           <View style={[styles.tipBadge, { backgroundColor: TIP_RENKLERI[tip] || '#F3F4F6' }]}>
             <Text style={[styles.tipText, { color: TIP_YAZI_RENKLERI[tip] || '#374151' }]}>{tip}</Text>
@@ -135,15 +288,13 @@ export default function VadelerScreen() {
           <Text style={styles.tarih}>{tarih}</Text>
         </View>
         <Text style={[styles.gunText, { color: gun.renk }]}>{gun.metin}</Text>
-        {tel && (
+        {!!gonderildi && <Text style={styles.gonderildi}>✓ Gönderildi {gonderildi}</Text>}
+        {tel && !secimModu && (
           <View style={styles.aksiyonSatiri}>
             <TouchableOpacity style={[styles.aksiyon, styles.araBtn]} onPress={() => Linking.openURL(`tel:+90${tel}`).catch(() => {})}>
               <Text style={[styles.aksiyonText, { color: '#1D4ED8' }]}>Ara</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.aksiyon, styles.waBtn]}
-              onPress={() => Linking.openURL(`https://wa.me/90${tel}?text=${encodeURIComponent(mesaj)}`).catch(() => {})}
-            >
+            <TouchableOpacity style={[styles.aksiyon, styles.waBtn]} onPress={() => tekilWhatsapp(p)}>
               <Text style={[styles.aksiyonText, { color: '#065F46' }]}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
@@ -173,9 +324,10 @@ export default function VadelerScreen() {
       <FlatList
         style={styles.liste}
         data={liste}
+        extraData={{ secili, gonderilen, secimModu }}
         keyExtractor={p => String(p.id)}
         renderItem={renderSatir}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: secimModu ? 90 : 32 }}
         refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={yenile} colors={['#2563EB']} />}
         ListEmptyComponent={
           <View style={styles.bos}>
@@ -188,9 +340,34 @@ export default function VadelerScreen() {
     );
   }
 
+  const headerSag = () =>
+    secimModu ? null : (
+      <View style={styles.headerSag}>
+        <TouchableOpacity onPress={() => router.push('/whatsapp-sablon')} accessibilityRole="button" hitSlop={8}>
+          <Text style={styles.headerLink}>Şablon</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setSecimModu(true)} accessibilityRole="button" hitSlop={8} style={styles.topluBtn}>
+          <Text style={styles.topluText}>Toplu</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
+  const siradaki = sira && sira.sonraki < sira.kuyruk.length ? sira.kuyruk[sira.sonraki] : null;
+
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: true, title: 'Vade Takibi' }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Vade Takibi', headerRight: headerSag }} />
+      {secimModu && (
+        <View style={styles.secimBar}>
+          <Text style={styles.secimSayi}>{seciliSayi} seçili</Text>
+          <TouchableOpacity onPress={tumunuSec} accessibilityRole="button" hitSlop={8}>
+            <Text style={styles.secimLink}>Tümünü seç</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={secimiKapat} accessibilityRole="button" hitSlop={8}>
+            <Text style={[styles.secimLink, { color: '#DC2626' }]}>Vazgeç</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.segment}>
         <TouchableOpacity style={[styles.segBtn, sekme === 'yaklasan' && styles.segBtnAktif]} onPress={() => setSekme('yaklasan')}>
           <Text style={[styles.segText, sekme === 'yaklasan' && styles.segTextAktif]}>
@@ -204,6 +381,39 @@ export default function VadelerScreen() {
         </TouchableOpacity>
       </View>
       {icerik}
+      {secimModu && (
+        <View style={styles.altBar}>
+          <TouchableOpacity
+            style={[styles.siraBtn, (seciliSayi === 0 || !!sira) && { opacity: 0.5 }]}
+            disabled={seciliSayi === 0 || !!sira}
+            onPress={siraBaslat}
+            accessibilityRole="button"
+          >
+            <Text style={styles.siraBtnText}>Sırayla Gönder ({seciliSayi})</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <Modal visible={modalAcik && !!siradaki} transparent animationType="fade" onRequestClose={() => siraBitir()}>
+        <View style={styles.modalArka}>
+          <View style={styles.modalKart}>
+            <Text style={styles.modalBaslik}>
+              {siradaki ? `Sıradaki: ${basHarfBuyuk(siradaki.customerName)} (${(sira?.sonraki ?? 0) + 1}/${sira?.kuyruk.length ?? 0})` : ''}
+            </Text>
+            <Text style={styles.modalAlt}>WhatsApp açıldığında mesajı gönderip buraya dönün.</Text>
+            <View style={styles.modalSatir}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#059669' }]} onPress={siraGonder} accessibilityRole="button">
+                <Text style={styles.modalBtnText}>Gönder</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#6B7280' }]} onPress={siraAtla} accessibilityRole="button">
+                <Text style={styles.modalBtnText}>Atla</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#DC2626' }]} onPress={() => siraBitir()} accessibilityRole="button">
+                <Text style={styles.modalBtnText}>Bitir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -221,6 +431,7 @@ const styles = StyleSheet.create({
   segTextAktif: { color: '#1F2937', fontWeight: '700' },
   liste: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
   kart: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  kartSecili: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
   kartUst: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 },
   musteriAdi: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1F2937' },
   tipBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
@@ -230,6 +441,7 @@ const styles = StyleSheet.create({
   sirket: { flex: 1, fontSize: 13, color: '#6B7280' },
   tarih: { fontSize: 13, color: '#374151', fontWeight: '500' },
   gunText: { fontSize: 14, fontWeight: '700' },
+  gonderildi: { fontSize: 12, color: '#059669', fontWeight: '600', marginTop: 4 },
   aksiyonSatiri: { flexDirection: 'row', gap: 8, marginTop: 10 },
   aksiyon: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
   araBtn: { backgroundColor: '#DBEAFE' },
@@ -237,4 +449,30 @@ const styles = StyleSheet.create({
   aksiyonText: { fontSize: 13, fontWeight: '600' },
   bos: { alignItems: 'center', paddingTop: 40 },
   bosText: { fontSize: 15, color: '#9CA3AF' },
+  headerSag: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerLink: { color: '#2563EB', fontSize: 15, fontWeight: '500' },
+  topluBtn: { backgroundColor: '#2563EB', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
+  topluText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  secimBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+  },
+  secimSayi: { flex: 1, fontSize: 15, fontWeight: '700', color: '#1F2937' },
+  secimLink: { fontSize: 14, fontWeight: '600', color: '#2563EB' },
+  kutu: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#9CA3AF', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  kutuSecili: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  tik: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', lineHeight: 16 },
+  altBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16,
+    backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB',
+  },
+  siraBtn: { backgroundColor: '#059669', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  siraBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  modalArka: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalKart: { width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20 },
+  modalBaslik: { fontSize: 17, fontWeight: '700', color: '#1F2937' },
+  modalAlt: { fontSize: 13, color: '#6B7280', marginTop: 6, marginBottom: 16 },
+  modalSatir: { flexDirection: 'row', gap: 8 },
+  modalBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
+  modalBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 });

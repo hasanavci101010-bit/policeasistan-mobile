@@ -16,6 +16,15 @@ const YASAL_BAGLANTILAR = [
   { baslik: 'Kullanım Koşulları', yol: '/kullanim-kosullari' },
 ];
 
+const HESAP_BAGLANTILARI = [
+  { baslik: 'Prof\u200Cil ve Firma', yol: '/profil' },
+  { baslik: 'Ekip', yol: '/ekip' },
+  { baslik: 'Hasar Dosyaları', yol: '/hasar' },
+  { baslik: 'Bildirim Ayarları', yol: '/bildirim-ayarlari' },
+  { baslik: 'Destek', yol: '/destek' },
+  { baslik: 'Faturalarım', yol: '/faturalar' },
+];
+
 const AY_KISA = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
 interface User {
@@ -221,12 +230,18 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Ayarlar</Text>
+      <Text style={styles.sectionTitle}>Hesap</Text>
       <View style={[styles.linkList, { marginBottom: 24 }]}>
-        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/bildirim-ayarlari' as any)}>
-          <Text style={styles.linkText}>Bildirim Ayarları</Text>
-          <Text style={styles.linkArrow}>›</Text>
-        </TouchableOpacity>
+        {HESAP_BAGLANTILARI.map((b, i) => (
+          <TouchableOpacity
+            key={b.yol}
+            style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
+            onPress={() => router.push(b.yol as any)}
+          >
+            <Text style={styles.linkText}>{b.baslik}</Text>
+            <Text style={styles.linkArrow}>›</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <Text style={styles.sectionTitle}>Yasal</Text>
