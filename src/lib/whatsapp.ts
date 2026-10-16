@@ -111,3 +111,89 @@ export async function gonderildiIsaretle(id: number | string): Promise<void> {
   m[String(id)] = new Date().toISOString();
   await AsyncStorage.setItem(GONDERILEN_ANAHTAR, JSON.stringify(m));
 }
+
+// ---- Hazir sablonlar (web paneldeki WA_TEMPLATES ile birebir ayni metin) ----
+
+export type SablonId = 'standart' | 'acil' | 'bilgi' | 'ozel';
+
+export type SablonGirdi = MesajPolice & { daysUntilExpiry?: number | null };
+
+export type SablonSecenek = {
+  id: SablonId;
+  baslik: string;
+  emoji: string;
+  aciklama: string;
+  olustur?: (p: SablonGirdi) => string;
+};
+
+export const HAZIR_SABLONLAR: SablonSecenek[] = [
+  {
+    id: 'standart',
+    baslik: 'Standart Hatırlatma',
+    emoji: '🔔',
+    aciklama: 'Poliçe bitiş tarihi yaklaşıyor — nazik ve profesyonel bir hatırlatma.',
+    olustur: (p) => {
+      const plaka = p.licensePlate ? `${p.licensePlate} plakalı aracınızın ` : '';
+      return `Sayın ${p.customerName},\n\n${plaka}${p.policyType} poliçenizin bitiş tarihine (${isoToTr(p.expiryDate)}) ${p.daysUntilExpiry ?? 0} gün kalmaktadır.\n\nPoliçenizi sorunsuz şekilde yenileyebilmeniz için sizinle iletişime geçmek istiyorum. Uygun bir zamanda beni aramanızı rica ederim.\n\nİyi günler,\nSigorta Danışmanınız`;
+    },
+  },
+  {
+    id: 'acil',
+    baslik: 'Acil Bildirim',
+    emoji: '⚡',
+    aciklama: 'Poliçe bugün veya 1-2 gün içinde bitiyor — aciliyet hissi uyandıran mesaj.',
+    olustur: (p) => {
+      const plaka = p.licensePlate ? `${p.licensePlate} plakalı ` : '';
+      const gun = p.daysUntilExpiry ?? 0;
+      const zamanlama = gun === 0 ? 'BUGÜN sona eriyor' : `${gun} gün sonra sona eriyor`;
+      return `⚠️ Sayın ${p.customerName},\n\n${plaka}${p.policyType} poliçeniz ${zamanlama}!\n\nSigorta güvencenizin kesintisiz devam etmesi ve hak kaybı yaşamamanız için lütfen EN KISA SÜREDE iletişime geçin. Yenileme işleminizi hızlıca tamamlayabiliriz.\n\nBizi bekliyoruz!\nSigorta Danışmanınız`;
+    },
+  },
+  {
+    id: 'bilgi',
+    baslik: 'Teklif Hazır',
+    emoji: '📋',
+    aciklama: 'Yeni dönem teklifi hazırlandı — yumuşak satış odaklı bilgi mesajı.',
+    olustur: (p) => {
+      const plaka = p.licensePlate ? `${p.licensePlate} plakalı ` : '';
+      return `Sayın ${p.customerName},\n\n${plaka}${p.policyType} poliçenize ait yeni dönem teklifiniz hazırlandı! 🎉\n\nBitiş tarihiniz: ${isoToTr(p.expiryDate)}\n\nSize daha iyi fiyat ve teminat seçenekleri sunabilmek için çeşitli sigorta şirketlerinden teklifler hazırladım. Detayları görüşmek için uygun bir zamanda beni aramanızı bekliyorum.\n\nİyi günler,\nSigorta Danışmanınız`;
+    },
+  },
+];
+
+export const OZEL_SABLON: SablonSecenek = {
+  id: 'ozel',
+  baslik: 'Özel şablonum',
+  emoji: '✏️',
+  aciklama: 'Kendi yazdığınız mesaj şablonu.',
+};
+
+export const TUM_SABLONLAR: SablonSecenek[] = [...HAZIR_SABLONLAR, OZEL_SABLON];
+
+// Secilen sablonla mesaj uretir ('ozel' -> kullanicinin sablonu)
+export function sablonMesaji(id: SablonId, police: SablonGirdi, ozelSablon: string, acente: string): string {
+  const h = HAZIR_SABLONLAR.find(s => s.id === id);
+  return h?.olustur ? h.olustur(police) : mesajOlustur(ozelSablon, police, acente);
+}
+
+export function onerilenSablon(gun: number | null | undefined): SablonId {
+  const g = Number(gun);
+  return Number.isFinite(g) && g >= 0 && g <= 2 ? 'acil' : 'standart';
+}
+
+const SON_SABLON_ANAHTAR = 'waSonSablon';
+
+export async function sonSablonGetir(): Promise<SablonId | null> {
+  try {
+    const s = await AsyncStorage.getItem(SON_SABLON_ANAHTAR);
+    return s === 'standart' || s === 'acil' || s === 'bilgi' || s === 'ozel' ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function sonSablonKaydet(id: SablonId): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SON_SABLON_ANAHTAR, id);
+  } catch {}
+}

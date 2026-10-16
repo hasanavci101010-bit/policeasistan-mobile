@@ -3,9 +3,10 @@ import { ActivityIndicator, Alert, AppState, FlatList, Linking, Modal, RefreshCo
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { apiFetch, isoToTr, OTURUM_HATASI, Police } from '../lib/police';
 import {
-  acenteGetir, basHarfBuyuk, gonderildiIsaretle, gonderilenleriGetir, mesajOlustur,
-  sablonGetir, telNormalize, tipAdi, waAc,
+  acenteGetir, basHarfBuyuk, gonderildiIsaretle, gonderilenleriGetir, onerilenSablon,
+  sablonGetir, sablonMesaji, telNormalize, tipAdi, waAc, type SablonId,
 } from '../lib/whatsapp';
+import SablonSecici from '../components/SablonSecici';
 
 const TIP_RENKLERI: Record<string, string> = {
   'Trafik': '#DBEAFE', 'Kasko': '#D1FAE5', 'DASK': '#FEF3C7', 'Konut': '#EDE9FE', 'Sağlık': '#FCE7F3',
@@ -30,7 +31,9 @@ function ggAa(iso: string | undefined): string {
 
 type Sekme = 'yaklasan' | 'gecmis';
 
-type Sira = { kuyruk: Police[]; sonraki: number; sablon: string; acente: string };
+type Sira = { kuyruk: Police[]; sonraki: number; sablonId: SablonId; ozel: string; acente: string };
+
+type SablonHedef = { tekil: Police } | { kuyruk: Police[] };
 
 async function yaklasanGetir(): Promise<Police[]> {
   const res = await apiFetch('/policies/urgent');
@@ -75,6 +78,7 @@ export default function VadelerScreen() {
   const [secili, setSecili] = useState<Record<string, true>>({});
   const [sira, setSira] = useState<Sira | null>(null);
   const [modalAcik, setModalAcik] = useState(false);
+  const [sablonHedef, setSablonHedef] = useState<SablonHedef | null>(null);
   const siraRef = useRef<Sira | null>(null);
   const donusBekleRef = useRef(false);
   const oncekiDurumRef = useRef(AppState.currentState);
@@ -127,11 +131,11 @@ export default function VadelerScreen() {
   };
 
   // Tek bir policeyi sablonla ac ve gonderildi isaretle; true = acildi
-  const policeAc = async (p: Police, sablon: string, acente: string): Promise<boolean> => {
+  const policeAc = async (p: Police, sablonId: SablonId, ozel: string, acente: string): Promise<boolean> => {
     const tel = telNormalize(p.customerPhone);
     if (!tel) return false;
     try {
-      await waAc(tel, mesajOlustur(sablon, p, acente));
+      await waAc(tel, sablonMesaji(sablonId, p, ozel, acente));
     } catch {
       return false;
     }
@@ -139,9 +143,9 @@ export default function VadelerScreen() {
     return true;
   };
 
-  const tekilWhatsapp = async (p: Police) => {
-    const [sablon, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
-    await policeAc(p, sablon, acente);
+  const tekilGonder = async (p: Police, sablonId: SablonId) => {
+    const [ozel, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
+    await policeAc(p, sablonId, ozel, acente);
   };
 
   const secimiKapat = () => {
@@ -161,26 +165,34 @@ export default function VadelerScreen() {
     const tumu = [...yaklasan, ...gecmis];
     const kuyruk = tumu.filter(p => secili[String(p.id)] && telNormalize(p.customerPhone));
     if (kuyruk.length === 0) return;
-    Alert.alert(
-      'Sırayla Gönder',
-      'WhatsApp açılacak; mesajı gönderip uygulamaya geri dönün.',
-      [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Başla',
-          onPress: async () => {
-            const [sablon, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
-            const ok = await policeAc(kuyruk[0], sablon, acente);
-            if (!ok) {
-              Alert.alert('Hata', 'WhatsApp açılamadı.');
-              return;
-            }
-            donusBekleRef.current = true;
-            siraAyarla({ kuyruk, sonraki: 1, sablon, acente });
+    setSablonHedef({ kuyruk });
+  };
+
+  // Sablon secildi: ipucu uyarisi, sonra sirayi baslat
+  const siraSablonSecildi = (kuyruk: Police[], sablonId: SablonId) => {
+    setSablonHedef(null);
+    setTimeout(() => {
+      Alert.alert(
+        'Sırayla Gönder',
+        'WhatsApp açılacak; mesajı gönderip uygulamaya geri dönün.',
+        [
+          { text: 'Vazgeç', style: 'cancel' },
+          {
+            text: 'Başla',
+            onPress: async () => {
+              const [ozel, acente] = await Promise.all([sablonGetir(), acenteGetir()]);
+              const ok = await policeAc(kuyruk[0], sablonId, ozel, acente);
+              if (!ok) {
+                Alert.alert('Hata', 'WhatsApp açılamadı.');
+                return;
+              }
+              donusBekleRef.current = true;
+              siraAyarla({ kuyruk, sonraki: 1, sablonId, ozel, acente });
+            },
           },
-        },
-      ],
-    );
+        ],
+      );
+    }, 350);
   };
 
   // Uygulama on plana donunce siradaki karti goster
@@ -207,7 +219,7 @@ export default function VadelerScreen() {
     if (!s) return;
     setModalAcik(false);
     const p = s.kuyruk[s.sonraki];
-    const ok = await policeAc(p, s.sablon, s.acente);
+    const ok = await policeAc(p, s.sablonId, s.ozel, s.acente);
     if (!ok) {
       Alert.alert('Hata', 'WhatsApp açılamadı.');
       setModalAcik(true);
@@ -294,7 +306,7 @@ export default function VadelerScreen() {
             <TouchableOpacity style={[styles.aksiyon, styles.araBtn]} onPress={() => Linking.openURL(`tel:+90${tel}`).catch(() => {})}>
               <Text style={[styles.aksiyonText, { color: '#1D4ED8' }]}>Ara</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.aksiyon, styles.waBtn]} onPress={() => tekilWhatsapp(p)}>
+            <TouchableOpacity style={[styles.aksiyon, styles.waBtn]} onPress={() => setSablonHedef({ tekil: p })}>
               <Text style={[styles.aksiyonText, { color: '#065F46' }]}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
@@ -393,6 +405,19 @@ export default function VadelerScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <SablonSecici
+        visible={!!sablonHedef}
+        police={sablonHedef ? ('tekil' in sablonHedef ? sablonHedef.tekil : sablonHedef.kuyruk[0]) : null}
+        varsayilan={sablonHedef && 'tekil' in sablonHedef ? onerilenSablon(sablonHedef.tekil.daysUntilExpiry) : 'standart'}
+        onayEtiketi={sablonHedef && 'kuyruk' in sablonHedef ? 'Bu şablonla başla' : "WhatsApp'ta Aç"}
+        onKapat={() => setSablonHedef(null)}
+        onOnayla={id => {
+          const h = sablonHedef;
+          if (!h) return;
+          if ('tekil' in h) { setSablonHedef(null); tekilGonder(h.tekil, id); }
+          else siraSablonSecildi(h.kuyruk, id);
+        }}
+      />
       <Modal visible={modalAcik && !!siradaki} transparent animationType="fade" onRequestClose={() => siraBitir()}>
         <View style={styles.modalArka}>
           <View style={styles.modalKart}>
