@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "384595495594",
+    "project_id": "com-policeasistan-mobile",
+    "storage_bucket": "com-policeasistan-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:384595495594:android:7ab285160b604056fdded3",
+        "android_client_info": {
+          "package_name": "com.policeasistan.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDy_1fIT9UwZtwBgMTSF7fEsPU3-4LkpYg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
