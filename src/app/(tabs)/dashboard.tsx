@@ -144,6 +144,8 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [yenileniyor, setYenileniyor] = useState(false);
   const ilkRef = useRef(true);
+  const scrollRef = useRef<ScrollView>(null);
+  const grafikY = useRef(0);
 
   // Bu ekran kendi ust cubugunu ciziyor
   useLayoutEffect(() => {
@@ -258,6 +260,7 @@ export default function DashboardScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.icerik}
         refreshControl={<RefreshControl refreshing={yenileniyor} onRefresh={yenile} tintColor={RENK.mavi} colors={[RENK.mavi]} />}
       >
@@ -324,7 +327,8 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <View style={styles.stat}>
+          <TouchableOpacity style={styles.stat} activeOpacity={0.8}
+            onPress={() => scrollRef.current?.scrollTo({ y: Math.max(0, grafikY.current - 12), animated: true })}>
             <View style={[styles.statIkon, { backgroundColor: '#EEEAFE' }]}>
               <Ikon name={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }} color={RENK.mor} />
             </View>
@@ -333,7 +337,7 @@ export default function DashboardScreen() {
               <Text style={[styles.statDeger, { fontSize: 19 }]} numberOfLines={1} adjustsFontSizeToFit>{tl(buAyUretim)}</Text>
               <Degisim deger={uretimDegisim} yuzde />
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Hizli islemler */}
@@ -391,7 +395,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Son 6 ay uretim + komisyon */}
-        <View style={styles.kart}>
+        <View style={styles.kart} onLayout={e => { grafikY.current = e.nativeEvent.layout.y; }}>
           <View style={styles.kartBaslikSatir}>
             <Text style={styles.kartBaslik}>Son 6 Ay Üretim</Text>
             <Text style={styles.komisyon}>Toplam komisyon: {tl(summary?.totalAcenteKomisyonu ?? 0)}</Text>
