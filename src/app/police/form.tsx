@@ -49,7 +49,7 @@ type TaranmisBelge = { uri: string; mime: string; tur: BelgeTuru };
 type ButonTipi = { text: string; onPress?: () => void; style?: 'cancel' | 'default' | 'destructive' };
 
 export default function PoliceFormScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, oku } = useLocalSearchParams<{ id?: string; oku?: string }>();
   const router = useRouter();
   const duzenleme = !!id;
 
@@ -302,6 +302,16 @@ export default function PoliceFormScreen() {
     if (Platform.OS === 'ios') butonlar.push({ text: 'Vazgeç', style: 'cancel' });
     Alert.alert('Belge türü', undefined, butonlar, { cancelable: true });
   };
+
+  // Ana sayfadaki 'Poliçe Oku' ile acilinca belge secimini otomatik baslat
+  const otomatikOkuRef = useRef(false);
+  useEffect(() => {
+    if (oku === '1' && !id && !otomatikOkuRef.current) {
+      otomatikOkuRef.current = true;
+      const t = setTimeout(belgedenDoldur, 400);
+      return () => clearTimeout(t);
+    }
+  }, [oku]);
 
   const ekran = (
     <Stack.Screen options={{ headerShown: true, title: duzenleme ? 'Poliçeyi Düzenle' : 'Yeni Poliçe' }} />
